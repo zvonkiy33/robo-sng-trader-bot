@@ -75,40 +75,10 @@ export function TradingDashboard() {
           </TabsList>
 
           <TabsContent value="dashboard">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Quick Stats */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Общий P&L</CardTitle>
-                  <CardDescription>За последние 24 часа</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-success">+$125.67</div>
-                  <p className="text-sm text-muted-foreground">+2.45% от депозита</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Открытые позиции</CardTitle>
-                  <CardDescription>Активные сделки</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">2/3</div>
-                  <p className="text-sm text-muted-foreground">BTC/USDT, ETH/USDT</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Винрейт</CardTitle>
-                  <CardDescription>Процент прибыльных сделок</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-success">68%</div>
-                  <p className="text-sm text-muted-foreground">17 из 25 сделок</p>
-                </CardContent>
-              </Card>
+            <div className="text-center py-8 text-muted-foreground">
+              <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-lg font-medium mb-2">Настройте API ключи для начала работы</p>
+              <p className="text-sm">Добавьте ключи Bybit и TokenMetrics в разделе ниже, затем перейдите в настройки для конфигурации робота</p>
             </div>
 
             {/* API Keys Setup */}

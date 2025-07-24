@@ -1,36 +1,152 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Wallet, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
 
+interface PortfolioData {
+  totalBalance: number;
+  availableBalance: number;
+  unrealizedPnL: number;
+  dailyPnL: number;
+  totalPnL: number;
+  openPositions: Array<{
+    symbol: string;
+    side: string;
+    size: number;
+    entryPrice: number;
+    currentPrice: number;
+    pnl: number;
+    pnlPercent: number;
+    stopLoss?: number;
+    takeProfit?: number;
+  }>;
+}
+
 export function Portfolio() {
-  const portfolioData = {
-    totalBalance: 5000,
-    availableBalance: 4500,
-    unrealizedPnL: 125.67,
-    dailyPnL: 85.32,
-    totalPnL: 456.78,
-    openPositions: [
-      {
-        symbol: "BTCUSDT",
-        side: "BUY",
-        size: 0.05,
-        entryPrice: 42500,
-        currentPrice: 43200,
-        pnl: 35.00,
-        pnlPercent: 1.65,
-      },
-      {
-        symbol: "ETHUSDT", 
-        side: "BUY",
-        size: 2.5,
-        entryPrice: 2580,
-        currentPrice: 2620,
-        pnl: 100.00,
-        pnlPercent: 1.55,
-      },
-    ],
+  const { user } = useAuth();
+  const [portfolioData, setPortfolioData] = useState<PortfolioData>({
+    totalBalance: 0,
+    availableBalance: 0,
+    unrealizedPnL: 0,
+    dailyPnL: 0,
+    totalPnL: 0,
+    openPositions: [],
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchPortfolioData();
+    }
+  }, [user]);
+
+  const fetchPortfolioData = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch open trades
+      const { data: openTrades, error: tradesError } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'OPEN');
+
+      if (tradesError) throw tradesError;
+
+      // Fetch today's trades for daily P&L
+      const today = new Date().toISOString().split('T')[0];
+      const { data: todayTrades, error: todayError } = await supabase
+        .from('trades')
+        .select('pnl')
+        .eq('user_id', user.id)
+        .gte('created_at', today + 'T00:00:00Z');
+
+      if (todayError) throw todayError;
+
+      // Fetch all closed trades for total P&L
+      const { data: allTrades, error: allError } = await supabase
+        .from('trades')
+        .select('pnl')
+        .eq('user_id', user.id)
+        .eq('status', 'CLOSED');
+
+      if (allError) throw allError;
+
+      // Calculate portfolio metrics
+      const mockBalance = 5000; // This would come from Bybit API
+      const dailyPnL = todayTrades?.reduce((sum, trade) => sum + (trade.pnl || 0), 0) || 0;
+      const totalPnL = allTrades?.reduce((sum, trade) => sum + (trade.pnl || 0), 0) || 0;
+      
+      // Mock current prices - these would come from real market data
+      const mockPrices: { [key: string]: number } = {
+        'BTCUSDT': 43200,
+        'ETHUSDT': 2620,
+        'ADAUSDT': 0.51,
+      };
+
+      const openPositions = openTrades?.map(trade => {
+        const currentPrice = mockPrices[trade.symbol] || trade.price || 0;
+        const pnl = trade.side === 'BUY' 
+          ? (currentPrice - (trade.filled_price || trade.price || 0)) * (trade.quantity || 0)
+          : ((trade.filled_price || trade.price || 0) - currentPrice) * (trade.quantity || 0);
+        const pnlPercent = ((pnl / ((trade.filled_price || trade.price || 0) * (trade.quantity || 0))) * 100);
+
+        return {
+          symbol: trade.symbol || '',
+          side: trade.side || '',
+          size: trade.quantity || 0,
+          entryPrice: trade.filled_price || trade.price || 0,
+          currentPrice,
+          pnl,
+          pnlPercent,
+          stopLoss: trade.stop_loss,
+          takeProfit: trade.take_profit,
+        };
+      }) || [];
+
+      const unrealizedPnL = openPositions.reduce((sum, pos) => sum + pos.pnl, 0);
+      const usedBalance = openPositions.reduce((sum, pos) => sum + (pos.entryPrice * pos.size), 0);
+
+      setPortfolioData({
+        totalBalance: mockBalance,
+        availableBalance: mockBalance - usedBalance,
+        unrealizedPnL,
+        dailyPnL,
+        totalPnL,
+        openPositions,
+      });
+
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-3">
+                <div className="h-4 bg-muted rounded animate-pulse" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 bg-muted rounded animate-pulse mb-2" />
+                <div className="h-3 bg-muted rounded animate-pulse w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -142,16 +258,20 @@ export function Portfolio() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Stop Loss: ${(position.entryPrice * 0.98).toFixed(2)}</span>
-                    <span>Take Profit: ${(position.entryPrice * 1.04).toFixed(2)}</span>
+                {(position.stopLoss || position.takeProfit) && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      {position.stopLoss && <span>Stop Loss: ${position.stopLoss.toFixed(2)}</span>}
+                      {position.takeProfit && <span>Take Profit: ${position.takeProfit.toFixed(2)}</span>}
+                    </div>
+                    {position.stopLoss && position.takeProfit && (
+                      <Progress 
+                        value={Math.min(Math.max(((position.currentPrice - position.stopLoss) / (position.takeProfit - position.stopLoss)) * 100, 0), 100)} 
+                        className="h-2"
+                      />
+                    )}
                   </div>
-                  <Progress 
-                    value={Math.min(Math.max(((position.currentPrice - position.entryPrice * 0.98) / (position.entryPrice * 1.04 - position.entryPrice * 0.98)) * 100, 0), 100)} 
-                    className="h-2"
-                  />
-                </div>
+                )}
               </div>
             ))}
             

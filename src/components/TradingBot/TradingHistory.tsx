@@ -1,3 +1,6 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -5,98 +8,116 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, TrendingUp, TrendingDown, Activity } from "lucide-react";
 
-export function TradingHistory() {
-  const trades = [
-    {
-      id: "1",
-      date: "2024-01-24 14:30",
-      symbol: "BTCUSDT",
-      side: "BUY",
-      size: 0.05,
-      entryPrice: 42500,
-      exitPrice: 43200,
-      pnl: 35.00,
-      pnlPercent: 1.65,
-      status: "CLOSED",
-      signalStrength: 0.85,
-      duration: "2h 15m",
-    },
-    {
-      id: "2", 
-      date: "2024-01-24 12:15",
-      symbol: "ETHUSDT",
-      side: "BUY", 
-      size: 2.5,
-      entryPrice: 2580,
-      exitPrice: 2620,
-      pnl: 100.00,
-      pnlPercent: 1.55,
-      status: "CLOSED",
-      signalStrength: 0.78,
-      duration: "1h 45m",
-    },
-    {
-      id: "3",
-      date: "2024-01-24 10:00",
-      symbol: "ADAUSDT", 
-      side: "BUY",
-      size: 1000,
-      entryPrice: 0.52,
-      exitPrice: 0.51,
-      pnl: -10.00,
-      pnlPercent: -1.92,
-      status: "CLOSED",
-      signalStrength: 0.72,
-      duration: "45m",
-    },
-    {
-      id: "4",
-      date: "2024-01-24 08:30",
-      symbol: "BTCUSDT",
-      side: "BUY",
-      size: 0.03,
-      entryPrice: 42000,
-      exitPrice: 43680,
-      pnl: 50.40,
-      pnlPercent: 4.00,
-      status: "CLOSED", 
-      signalStrength: 0.92,
-      duration: "3h 20m",
-    },
-  ];
+interface Trade {
+  id: string;
+  created_at: string;
+  closed_at?: string;
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  filled_price?: number;
+  pnl?: number;
+  status: string;
+  signal_strength?: number;
+}
 
-  const signals = [
-    {
-      id: "1",
-      timestamp: "2024-01-24 15:00",
-      symbol: "BTCUSDT",
-      signal: "BUY",
-      strength: 0.88,
-      price: 43100,
-      status: "EXECUTED",
-      reason: "Strong bullish momentum detected",
-    },
-    {
-      id: "2",
-      timestamp: "2024-01-24 14:45", 
-      symbol: "ETHUSDT",
-      signal: "SELL",
-      strength: 0.65,
-      price: 2610,
-      status: "IGNORED",
-      reason: "Signal strength below threshold (0.70)",
-    },
-    {
-      id: "3",
-      timestamp: "2024-01-24 14:30",
-      symbol: "DOTUSDT",
-      signal: "BUY", 
-      strength: 0.82,
-      price: 7.25,
-      status: "IGNORED",
-      reason: "Maximum positions limit reached (3/3)",
-    },
-  ];
+interface TradingStats {
+  totalTrades: number;
+  winRate: number;
+  avgProfit: number;
+  profitableTrades: number;
+}
+
+export function TradingHistory() {
+  const { user } = useAuth();
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [stats, setStats] = useState<TradingStats>({
+    totalTrades: 0,
+    winRate: 0,
+    avgProfit: 0,
+    profitableTrades: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchTradingData();
+    }
+  }, [user]);
+
+  const fetchTradingData = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch closed trades from last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: closedTrades, error: tradesError } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'CLOSED')
+        .gte('created_at', thirtyDaysAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (tradesError) throw tradesError;
+
+      setTrades(closedTrades || []);
+
+      // Calculate statistics
+      if (closedTrades && closedTrades.length > 0) {
+        const profitableTrades = closedTrades.filter(trade => (trade.pnl || 0) > 0).length;
+        const totalPnL = closedTrades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
+        
+        setStats({
+          totalTrades: closedTrades.length,
+          winRate: (profitableTrades / closedTrades.length) * 100,
+          avgProfit: profitableTrades > 0 ? (totalPnL / profitableTrades) : 0,
+          profitableTrades,
+        });
+      }
+
+    } catch (error) {
+      console.error('Error fetching trading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDuration = (createdAt: string, closedAt?: string) => {
+    if (!closedAt) return 'N/A';
+    
+    const start = new Date(createdAt);
+    const end = new Date(closedAt);
+    const diffMs = end.getTime() - start.getTime();
+    
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const calculatePnLPercent = (trade: Trade) => {
+    if (!trade.pnl || !trade.filled_price) return 0;
+    const investment = trade.filled_price * trade.quantity;
+    return (trade.pnl / investment) * 100;
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 bg-muted rounded animate-pulse w-1/3" />
+        <div className="h-64 bg-muted rounded animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -139,40 +160,59 @@ export function TradingHistory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {trades.map((trade) => (
-                    <TableRow key={trade.id}>
-                      <TableCell className="text-sm">
-                        {trade.date}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {trade.symbol}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={trade.side === 'BUY' ? 'default' : 'destructive'}>
-                          {trade.side}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{trade.size}</TableCell>
-                      <TableCell>${trade.entryPrice.toLocaleString()}</TableCell>
-                      <TableCell>${trade.exitPrice.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <div className={`font-medium ${trade.pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
-                          {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
-                          <div className="text-xs">
-                            {trade.pnl >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(2)}%
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {(trade.signalStrength * 100).toFixed(0)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {trade.duration}
+                  {trades.length > 0 ? (
+                    trades.map((trade) => (
+                      <TableRow key={trade.id}>
+                        <TableCell className="text-sm">
+                          {new Date(trade.created_at).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {trade.symbol}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={trade.side === 'BUY' ? 'default' : 'destructive'}>
+                            {trade.side}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{trade.quantity}</TableCell>
+                        <TableCell>${(trade.filled_price || trade.price).toLocaleString()}</TableCell>
+                        <TableCell>
+                          {trade.status === 'CLOSED' && trade.filled_price ? 
+                            `$${trade.filled_price.toLocaleString()}` : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {trade.pnl !== null && trade.pnl !== undefined ? (
+                            <div className={`font-medium ${trade.pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                              {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
+                              <div className="text-xs">
+                                {trade.pnl >= 0 ? '+' : ''}{calculatePnLPercent(trade).toFixed(2)}%
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {trade.signal_strength ? (
+                            <Badge variant="outline">
+                              {(trade.signal_strength * 100).toFixed(0)}%
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDuration(trade.created_at, trade.closed_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        Нет данных о сделках за последние 30 дней
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -184,67 +224,16 @@ export function TradingHistory() {
             <CardHeader>
               <CardTitle>AI торговые сигналы</CardTitle>
               <CardDescription>
-                Сигналы от TokenMetrics и их обработка роботом
+                Сигналы от TokenMetrics появятся здесь после запуска робота
               </CardDescription>
             </CardHeader>
             
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Время</TableHead>
-                    <TableHead>Пара</TableHead>
-                    <TableHead>Сигнал</TableHead>
-                    <TableHead>Сила</TableHead>
-                    <TableHead>Цена</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Причина</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {signals.map((signal) => (
-                    <TableRow key={signal.id}>
-                      <TableCell className="text-sm">
-                        {signal.timestamp}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {signal.symbol}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={signal.signal === 'BUY' ? 'default' : 'destructive'}>
-                          {signal.signal === 'BUY' ? (
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                          ) : (
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                          )}
-                          {signal.signal}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={signal.strength >= 0.8 ? 'default' : signal.strength >= 0.7 ? 'secondary' : 'outline'}
-                        >
-                          {(signal.strength * 100).toFixed(0)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell>${signal.price.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={signal.status === 'EXECUTED' ? 'default' : 'secondary'}
-                        >
-                          {signal.status === 'EXECUTED' ? (
-                            <Activity className="w-3 h-3 mr-1" />
-                          ) : null}
-                          {signal.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                        {signal.reason}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="text-center py-8 text-muted-foreground">
+                <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Сигналы пока не поступали</p>
+                <p className="text-sm">Запустите торгового робота для получения AI сигналов от TokenMetrics</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -257,7 +246,7 @@ export function TradingHistory() {
             <CardTitle className="text-sm font-medium">Всего сделок</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">25</div>
+            <div className="text-2xl font-bold">{stats.totalTrades}</div>
             <p className="text-xs text-muted-foreground">За последние 30 дней</p>
           </CardContent>
         </Card>
@@ -267,8 +256,12 @@ export function TradingHistory() {
             <CardTitle className="text-sm font-medium">Винрейт</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">68%</div>
-            <p className="text-xs text-muted-foreground">17 прибыльных из 25</p>
+            <div className={`text-2xl font-bold ${stats.winRate > 50 ? 'text-success' : 'text-muted-foreground'}`}>
+              {stats.winRate.toFixed(0)}%
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {stats.profitableTrades} прибыльных из {stats.totalTrades}
+            </p>
           </CardContent>
         </Card>
 
@@ -277,7 +270,9 @@ export function TradingHistory() {
             <CardTitle className="text-sm font-medium">Средняя прибыль</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">+1.85%</div>
+            <div className={`text-2xl font-bold ${stats.avgProfit > 0 ? 'text-success' : 'text-muted-foreground'}`}>
+              {stats.avgProfit > 0 ? '+' : ''}${stats.avgProfit.toFixed(2)}
+            </div>
             <p className="text-xs text-muted-foreground">На прибыльную сделку</p>
           </CardContent>
         </Card>

@@ -14,96 +14,228 @@ export type Database = {
   }
   public: {
     Tables: {
-      family_events: {
+      api_credentials: {
         Row: {
+          api_key: string
+          api_secret: string
           created_at: string
-          created_by_telegram_id: string | null
-          description: string | null
-          event_date: string
-          event_type: string | null
+          exchange: string
           id: string
-          title: string
+          is_active: boolean
+          is_demo: boolean
+          updated_at: string
+          user_id: string
         }
         Insert: {
+          api_key: string
+          api_secret: string
           created_at?: string
-          created_by_telegram_id?: string | null
-          description?: string | null
-          event_date: string
-          event_type?: string | null
+          exchange?: string
           id?: string
-          title: string
+          is_active?: boolean
+          is_demo?: boolean
+          updated_at?: string
+          user_id: string
         }
         Update: {
+          api_key?: string
+          api_secret?: string
           created_at?: string
-          created_by_telegram_id?: string | null
-          description?: string | null
-          event_date?: string
-          event_type?: string | null
+          exchange?: string
           id?: string
-          title?: string
+          is_active?: boolean
+          is_demo?: boolean
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
-      family_members: {
+      bot_settings: {
         Row: {
           created_at: string
-          first_name: string | null
+          daily_loss_limit_percent: number
           id: string
-          is_admin: boolean | null
-          last_name: string | null
-          telegram_id: string
-          username: string | null
+          is_active: boolean
+          is_demo: boolean
+          max_positions: number
+          min_signal_strength: number
+          position_size_percent: number
+          stop_loss_percent: number
+          take_profit_percent: number
+          trading_pairs: string[]
+          updated_at: string
+          user_id: string
         }
         Insert: {
           created_at?: string
-          first_name?: string | null
+          daily_loss_limit_percent?: number
           id?: string
-          is_admin?: boolean | null
-          last_name?: string | null
-          telegram_id: string
-          username?: string | null
+          is_active?: boolean
+          is_demo?: boolean
+          max_positions?: number
+          min_signal_strength?: number
+          position_size_percent?: number
+          stop_loss_percent?: number
+          take_profit_percent?: number
+          trading_pairs?: string[]
+          updated_at?: string
+          user_id: string
         }
         Update: {
           created_at?: string
-          first_name?: string | null
+          daily_loss_limit_percent?: number
           id?: string
-          is_admin?: boolean | null
-          last_name?: string | null
-          telegram_id?: string
-          username?: string | null
+          is_active?: boolean
+          is_demo?: boolean
+          max_positions?: number
+          min_signal_strength?: number
+          position_size_percent?: number
+          stop_loss_percent?: number
+          take_profit_percent?: number
+          trading_pairs?: string[]
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
-      family_tasks: {
+      portfolio_snapshots: {
         Row: {
-          completed_at: string | null
+          available_balance: number
           created_at: string
-          created_by_telegram_id: string | null
-          description: string | null
+          daily_pnl: number
           id: string
-          is_completed: boolean | null
-          task_type: string | null
-          title: string
+          open_positions: number
+          snapshot_date: string
+          total_balance: number
+          total_pnl: number
+          unrealized_pnl: number
+          user_id: string
+          win_rate: number | null
         }
         Insert: {
-          completed_at?: string | null
+          available_balance: number
           created_at?: string
-          created_by_telegram_id?: string | null
-          description?: string | null
+          daily_pnl?: number
           id?: string
-          is_completed?: boolean | null
-          task_type?: string | null
-          title: string
+          open_positions?: number
+          snapshot_date?: string
+          total_balance: number
+          total_pnl?: number
+          unrealized_pnl?: number
+          user_id: string
+          win_rate?: number | null
         }
         Update: {
-          completed_at?: string | null
+          available_balance?: number
           created_at?: string
-          created_by_telegram_id?: string | null
-          description?: string | null
+          daily_pnl?: number
           id?: string
-          is_completed?: boolean | null
-          task_type?: string | null
-          title?: string
+          open_positions?: number
+          snapshot_date?: string
+          total_balance?: number
+          total_pnl?: number
+          unrealized_pnl?: number
+          user_id?: string
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
+      trades: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          exchange_order_id: string | null
+          fees: number | null
+          filled_at: string | null
+          filled_price: number | null
+          id: string
+          order_type: string
+          pnl: number | null
+          price: number | null
+          quantity: number
+          side: string
+          signal_source: string | null
+          signal_strength: number | null
+          status: string
+          stop_loss: number | null
+          symbol: string
+          take_profit: number | null
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          exchange_order_id?: string | null
+          fees?: number | null
+          filled_at?: string | null
+          filled_price?: number | null
+          id?: string
+          order_type?: string
+          pnl?: number | null
+          price?: number | null
+          quantity: number
+          side: string
+          signal_source?: string | null
+          signal_strength?: number | null
+          status?: string
+          stop_loss?: number | null
+          symbol: string
+          take_profit?: number | null
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          exchange_order_id?: string | null
+          fees?: number | null
+          filled_at?: string | null
+          filled_price?: number | null
+          id?: string
+          order_type?: string
+          pnl?: number | null
+          price?: number | null
+          quantity?: number
+          side?: string
+          signal_source?: string | null
+          signal_strength?: number | null
+          status?: string
+          stop_loss?: number | null
+          symbol?: string
+          take_profit?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_pairs: {
+        Row: {
+          base_asset: string
+          created_at: string
+          id: string
+          is_active: boolean
+          min_order_size: number | null
+          quote_asset: string
+          symbol: string
+          tick_size: number | null
+        }
+        Insert: {
+          base_asset: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_order_size?: number | null
+          quote_asset: string
+          symbol: string
+          tick_size?: number | null
+        }
+        Update: {
+          base_asset?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_order_size?: number | null
+          quote_asset?: string
+          symbol?: string
+          tick_size?: number | null
         }
         Relationships: []
       }

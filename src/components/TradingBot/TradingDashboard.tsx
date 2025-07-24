@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,11 +10,79 @@ import { ApiKeysSetup } from "./ApiKeysSetup";
 import { BotSettings } from "./BotSettings";
 import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export function TradingDashboard() {
-  useAuth(); // Initialize anonymous authentication
+  const { user } = useAuth(); // Initialize anonymous authentication
   const [isDemo, setIsDemo] = useState(true);
   const [isBotActive, setIsBotActive] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  // Load bot status on mount
+  useEffect(() => {
+    if (user) {
+      loadBotStatus();
+    }
+  }, [user]);
+
+  const loadBotStatus = async () => {
+    try {
+      const { data } = await supabase
+        .from('bot_settings')
+        .select('is_active, is_demo')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (data) {
+        setIsBotActive(data.is_active);
+        setIsDemo(data.is_demo);
+      }
+    } catch (error) {
+      console.error('Error loading bot status:', error);
+    }
+  };
+
+  const handleToggleBot = async () => {
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const action = isBotActive ? 'stop_bot' : 'start_bot';
+      
+      const response = await supabase.functions.invoke('trading-bot', {
+        body: {
+          user_id: user.id,
+          action,
+          data: {
+            is_demo: isDemo,
+            settings: {} // Settings will be loaded from DB
+          }
+        }
+      });
+
+      if (response.error) throw response.error;
+
+      setIsBotActive(!isBotActive);
+      
+      toast({
+        title: isBotActive ? "Робот остановлен" : "Робот запущен",
+        description: isBotActive 
+          ? "Торговый робот успешно остановлен" 
+          : "Торговый робот успешно запущен",
+      });
+    } catch (error) {
+      console.error('Error toggling bot:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось изменить состояние робота",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -40,10 +108,11 @@ export function TradingDashboard() {
             <div className="flex items-center space-x-2">
               <Button
                 variant={isBotActive ? "destructive" : "default"}
-                onClick={() => setIsBotActive(!isBotActive)}
+                onClick={handleToggleBot}
+                disabled={loading}
                 className="min-w-[120px]"
               >
-                {isBotActive ? "Остановить" : "Запустить"}
+                {loading ? "..." : (isBotActive ? "Остановить" : "Запустить")}
               </Button>
               <Badge variant={isBotActive ? "default" : "secondary"}>
                 <Activity className="w-3 h-3 mr-1" />

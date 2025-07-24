@@ -51,18 +51,54 @@ Deno.serve(async (req) => {
 })
 
 async function startTradingBot(supabase: any, user_id: string, data: any) {
+  console.log(`Starting trading bot for user ${user_id} with data:`, data)
+  
+  // Get existing settings first
+  const { data: existingSettings, error: fetchError } = await supabase
+    .from('bot_settings')
+    .select('*')
+    .eq('user_id', user_id)
+    .single()
+
+  if (fetchError && fetchError.code !== 'PGRST116') {
+    console.error('Error fetching existing settings:', fetchError)
+    throw fetchError
+  }
+
   // Update bot settings to active
+  const settingsToUpdate = existingSettings ? {
+    ...existingSettings,
+    is_active: true,
+    is_demo: data.is_demo,
+    updated_at: new Date().toISOString()
+  } : {
+    user_id,
+    is_active: true,
+    is_demo: data.is_demo,
+    max_positions: 3,
+    position_size_percent: 1.00,
+    stop_loss_percent: 2.00,
+    take_profit_percent: 4.00,
+    daily_loss_limit_percent: 5.00,
+    min_signal_strength: 0.70,
+    timeframe: '15m',
+    trading_pairs: ['BTCUSDT', 'ETHUSDT']
+  }
+
+  console.log('Settings to upsert:', settingsToUpdate)
+
   const { error } = await supabase
     .from('bot_settings')
-    .upsert({
-      user_id,
-      is_active: true,
-      is_demo: data.is_demo,
-      ...data.settings
+    .upsert(settingsToUpdate, {
+      onConflict: 'user_id'
     })
 
-  if (error) throw error
+  if (error) {
+    console.error('Error upserting bot settings:', error)
+    throw error
+  }
 
+  console.log('Trading bot started successfully')
   return new Response(JSON.stringify({ 
     success: true, 
     message: 'Trading bot started successfully' 

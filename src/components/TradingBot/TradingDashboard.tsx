@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
 
 export function TradingDashboard() {
+  useAuth(); // Initialize anonymous authentication
   const [isDemo, setIsDemo] = useState(true);
   const [isBotActive, setIsBotActive] = useState(false);
 

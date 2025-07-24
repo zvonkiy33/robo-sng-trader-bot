@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Settings2, Shield, TrendingUp, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 export function BotSettings() {
   const [settings, setSettings] = useState({
@@ -22,14 +24,81 @@ export function BotSettings() {
     timeframe: "15m",
     tradingPairs: ["BTCUSDT", "ETHUSDT"],
   });
+  const [loading, setLoading] = useState(false);
 
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  const handleSaveSettings = () => {
-    toast({
-      title: "Настройки сохранены",
-      description: "Параметры торгового робота обновлены",
-    });
+  // Load existing settings
+  useEffect(() => {
+    if (user) {
+      loadSettings();
+    }
+  }, [user]);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bot_settings')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (data) {
+        setSettings({
+          isActive: data.is_active,
+          maxPositions: data.max_positions,
+          positionSizePercent: Number(data.position_size_percent),
+          stopLossPercent: Number(data.stop_loss_percent),
+          takeProfitPercent: Number(data.take_profit_percent),
+          dailyLossLimitPercent: Number(data.daily_loss_limit_percent),
+          minSignalStrength: Number(data.min_signal_strength),
+          timeframe: data.timeframe || "15m",
+          tradingPairs: data.trading_pairs || ["BTCUSDT", "ETHUSDT"],
+        });
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('bot_settings')
+        .upsert({
+          user_id: user.id,
+          is_active: settings.isActive,
+          max_positions: settings.maxPositions,
+          position_size_percent: settings.positionSizePercent,
+          stop_loss_percent: settings.stopLossPercent,
+          take_profit_percent: settings.takeProfitPercent,
+          daily_loss_limit_percent: settings.dailyLossLimitPercent,
+          min_signal_strength: settings.minSignalStrength,
+          timeframe: settings.timeframe,
+          trading_pairs: settings.tradingPairs,
+          is_demo: true // default to demo mode
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Настройки сохранены",
+        description: "Параметры торгового робота обновлены",
+      });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить настройки",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -251,9 +320,9 @@ export function BotSettings() {
 
       {/* Save Button */}
       <div className="flex justify-end">
-        <Button onClick={handleSaveSettings} size="lg">
+        <Button onClick={handleSaveSettings} size="lg" disabled={loading}>
           <Settings2 className="w-4 h-4 mr-2" />
-          Сохранить настройки
+          {loading ? "Сохранение..." : "Сохранить настройки"}
         </Button>
       </div>
     </div>

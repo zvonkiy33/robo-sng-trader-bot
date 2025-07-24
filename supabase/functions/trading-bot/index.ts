@@ -119,7 +119,7 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
       action: 'get_signals',
       data: {
         symbols: settings.trading_pairs.map((pair: string) => pair.replace('USDT', '')),
-        timeframe: '15m'
+        timeframe: settings.timeframe || '15m'
       }
     })
   })
@@ -171,11 +171,52 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
       continue
     }
 
-    processedSignals.push({
-      ...signal,
-      status: 'READY_TO_EXECUTE',
-      reason: `Strong signal (${(signal.confidence * 100).toFixed(0)}% confidence)`
-    })
+    // Automatically execute qualifying signals
+    try {
+      console.log(`Auto-executing signal for ${signal.symbol} (confidence: ${(signal.confidence * 100).toFixed(0)}%)`)
+      
+      const executeResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/trading-bot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        },
+        body: JSON.stringify({
+          user_id,
+          action: 'execute_trade',
+          data: {
+            signal: signal,
+            is_demo: settings.is_demo
+          }
+        })
+      })
+
+      const executeResult = await executeResponse.json()
+      
+      if (executeResult.success) {
+        processedSignals.push({
+          ...signal,
+          status: 'EXECUTED',
+          trade_id: executeResult.data.trade.id,
+          reason: `Signal executed automatically (${(signal.confidence * 100).toFixed(0)}% confidence)`
+        })
+        console.log(`Trade executed successfully for ${signal.symbol}`)
+      } else {
+        processedSignals.push({
+          ...signal,
+          status: 'EXECUTION_FAILED',
+          reason: `Execution failed: ${executeResult.error}`
+        })
+        console.error(`Trade execution failed for ${signal.symbol}:`, executeResult.error)
+      }
+    } catch (error) {
+      processedSignals.push({
+        ...signal,
+        status: 'EXECUTION_ERROR',
+        reason: `Execution error: ${error.message}`
+      })
+      console.error(`Trade execution error for ${signal.symbol}:`, error)
+    }
   }
 
   return new Response(JSON.stringify({ 

@@ -91,7 +91,9 @@ export function BotSettings() {
       
       const { data, error } = await supabase
         .from('bot_settings')
-        .upsert(dataToSave);
+        .upsert(dataToSave, {
+          onConflict: 'user_id'
+        });
 
       console.log('Upsert result - data:', data, 'error:', error);
 

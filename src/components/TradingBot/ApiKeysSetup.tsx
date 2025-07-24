@@ -1,0 +1,153 @@
+import { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Eye, EyeOff, Key, CheckCircle, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface ApiKeysSetupProps {
+  isDemo: boolean;
+}
+
+export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
+  const [showKeys, setShowKeys] = useState(false);
+  const [keys, setKeys] = useState({
+    bybitApiKey: "",
+    bybitApiSecret: "",
+    tokenMetricsKey: "",
+  });
+  const [isConnected, setIsConnected] = useState(false);
+  const { toast } = useToast();
+
+  const handleSaveKeys = async () => {
+    if (!keys.bybitApiKey || !keys.bybitApiSecret || !keys.tokenMetricsKey) {
+      toast({
+        title: "Ошибка",
+        description: "Заполните все поля API ключей",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Here we would save to Supabase
+    setIsConnected(true);
+    toast({
+      title: "API ключи сохранены",
+      description: `Подключение к ${isDemo ? "демо" : "реальному"} счету успешно`,
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center space-x-2">
+              <Key className="w-5 h-5" />
+              <span>API ключи</span>
+            </CardTitle>
+            <CardDescription>
+              Настройте подключение к {isDemo ? "демо" : "реальному"} счету Bybit и TokenMetrics
+            </CardDescription>
+          </div>
+          <Badge variant={isConnected ? "default" : "secondary"}>
+            {isConnected ? (
+              <CheckCircle className="w-3 h-3 mr-1" />
+            ) : (
+              <AlertCircle className="w-3 h-3 mr-1" />
+            )}
+            {isConnected ? "Подключено" : "Не подключено"}
+          </Badge>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="space-y-6">
+        {/* Bybit API Keys */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Bybit {isDemo ? "Demo" : "Live"} API</h3>
+            <Badge variant="outline">
+              {isDemo ? "testnet.bybit.com" : "api.bybit.com"}
+            </Badge>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="bybit-key">API Key</Label>
+              <Input
+                id="bybit-key"
+                type={showKeys ? "text" : "password"}
+                placeholder={isDemo ? "Введите demo API key" : "Введите live API key"}
+                value={keys.bybitApiKey}
+                onChange={(e) => setKeys({ ...keys, bybitApiKey: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="bybit-secret">API Secret</Label>
+              <div className="relative">
+                <Input
+                  id="bybit-secret"
+                  type={showKeys ? "text" : "password"}
+                  placeholder="Введите API secret"
+                  value={keys.bybitApiSecret}
+                  onChange={(e) => setKeys({ ...keys, bybitApiSecret: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                  onClick={() => setShowKeys(!showKeys)}
+                >
+                  {showKeys ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* TokenMetrics API Key */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">TokenMetrics API</h3>
+            <Badge variant="outline">tokenmetrics.com</Badge>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="tokenmetrics-key">API Key</Label>
+            <Input
+              id="tokenmetrics-key"
+              type={showKeys ? "text" : "password"}
+              placeholder="Введите TokenMetrics API key"
+              value={keys.tokenMetricsKey}
+              onChange={(e) => setKeys({ ...keys, tokenMetricsKey: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end space-x-3">
+          <Button variant="outline" onClick={() => setKeys({ bybitApiKey: "", bybitApiSecret: "", tokenMetricsKey: "" })}>
+            Очистить
+          </Button>
+          <Button onClick={handleSaveKeys}>
+            Сохранить API ключи
+          </Button>
+        </div>
+
+        {/* Instructions */}
+        <div className="bg-muted p-4 rounded-lg space-y-2">
+          <h4 className="font-semibold text-sm">Инструкции:</h4>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• Bybit: Создайте API ключи с разрешениями Trade, Contract, Assets</li>
+            <li>• TokenMetrics: Получите API ключ в личном кабинете</li>
+            <li>• {isDemo ? "Используйте демо API для безопасного тестирования" : "ВНИМАНИЕ: Реальная торговля с реальными деньгами!"}</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

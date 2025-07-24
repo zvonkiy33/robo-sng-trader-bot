@@ -62,6 +62,7 @@ export type Database = {
           position_size_percent: number
           stop_loss_percent: number
           take_profit_percent: number
+          timeframe: string | null
           trading_pairs: string[]
           updated_at: string
           user_id: string
@@ -77,6 +78,7 @@ export type Database = {
           position_size_percent?: number
           stop_loss_percent?: number
           take_profit_percent?: number
+          timeframe?: string | null
           trading_pairs?: string[]
           updated_at?: string
           user_id: string
@@ -92,6 +94,7 @@ export type Database = {
           position_size_percent?: number
           stop_loss_percent?: number
           take_profit_percent?: number
+          timeframe?: string | null
           trading_pairs?: string[]
           updated_at?: string
           user_id?: string
@@ -271,7 +274,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      execute_trading_bot_automation: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -19,6 +19,7 @@ export function BotSettings() {
     takeProfitPercent: 4,
     dailyLossLimitPercent: 5,
     minSignalStrength: 0.7,
+    timeframe: "15m",
     tradingPairs: ["BTCUSDT", "ETHUSDT"],
   });
 
@@ -181,6 +182,32 @@ export function BotSettings() {
         </CardHeader>
         
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Таймфрейм анализа сигналов</Label>
+            <Select 
+              value={settings.timeframe} 
+              onValueChange={(value) => setSettings({ ...settings, timeframe: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите таймфрейм" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1m">1 минута (очень активная торговля)</SelectItem>
+                <SelectItem value="3m">3 минуты (активная торговля)</SelectItem>
+                <SelectItem value="5m">5 минут (частая торговля)</SelectItem>
+                <SelectItem value="15m">15 минут (рекомендуется для начинающих)</SelectItem>
+                <SelectItem value="30m">30 минут (умеренная торговля)</SelectItem>
+                <SelectItem value="1h">1 час (спокойная торговля)</SelectItem>
+                <SelectItem value="4h">4 часа (долгосрочная торговля)</SelectItem>
+                <SelectItem value="1d">1 день (позиционная торговля)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              Короткие таймфреймы (1-5 мин) = больше сделок, больше комиссий, выше риски. 
+              Длинные таймфреймы (1-4 часа) = меньше сделок, меньше комиссий, стабильнее сигналы.
+            </p>
+          </div>
+          
           <div className="space-y-2">
             <Label>Торговые пары</Label>
             <div className="flex flex-wrap gap-2">

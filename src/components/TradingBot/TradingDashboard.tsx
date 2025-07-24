@@ -45,24 +45,46 @@ export function TradingDashboard() {
   };
 
   const handleToggleBot = async () => {
-    if (!user) return;
+    if (!user) {
+      console.error('No user found for toggle bot');
+      return;
+    }
+
+    console.log('Toggling bot - current state:', isBotActive);
+    console.log('User ID:', user.id);
+    console.log('Demo mode:', isDemo);
 
     setLoading(true);
     try {
       const action = isBotActive ? 'stop_bot' : 'start_bot';
+      console.log('Action to perform:', action);
+      
+      const requestBody = {
+        user_id: user.id,
+        action,
+        data: {
+          is_demo: isDemo,
+          settings: {} // Settings will be loaded from DB
+        }
+      };
+      
+      console.log('Request body:', requestBody);
       
       const response = await supabase.functions.invoke('trading-bot', {
-        body: {
-          user_id: user.id,
-          action,
-          data: {
-            is_demo: isDemo,
-            settings: {} // Settings will be loaded from DB
-          }
-        }
+        body: requestBody
       });
 
-      if (response.error) throw response.error;
+      console.log('Response from trading-bot:', response);
+
+      if (response.error) {
+        console.error('Supabase function error:', response.error);
+        throw response.error;
+      }
+
+      if (response.data && !response.data.success) {
+        console.error('Trading bot error:', response.data.error);
+        throw new Error(response.data.error);
+      }
 
       setIsBotActive(!isBotActive);
       
@@ -73,10 +95,12 @@ export function TradingDashboard() {
           : "Торговый робот успешно запущен",
       });
     } catch (error) {
-      console.error('Error toggling bot:', error);
+      console.error('Error toggling bot - full error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
       toast({
         title: "Ошибка",
-        description: "Не удалось изменить состояние робота",
+        description: `Не удалось изменить состояние робота: ${error.message}`,
         variant: "destructive",
       });
     } finally {

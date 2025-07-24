@@ -63,37 +63,55 @@ export function BotSettings() {
   };
 
   const handleSaveSettings = async () => {
-    if (!user) return;
+    if (!user) {
+      console.error('No user found for saving settings');
+      return;
+    }
+    
+    console.log('Starting to save settings for user:', user.id);
+    console.log('Settings to save:', settings);
     
     setLoading(true);
     try {
-      const { error } = await supabase
+      const dataToSave = {
+        user_id: user.id,
+        is_active: settings.isActive,
+        max_positions: settings.maxPositions,
+        position_size_percent: settings.positionSizePercent,
+        stop_loss_percent: settings.stopLossPercent,
+        take_profit_percent: settings.takeProfitPercent,
+        daily_loss_limit_percent: settings.dailyLossLimitPercent,
+        min_signal_strength: settings.minSignalStrength,
+        timeframe: settings.timeframe,
+        trading_pairs: settings.tradingPairs,
+        is_demo: true // default to demo mode
+      };
+      
+      console.log('Data to upsert:', dataToSave);
+      
+      const { data, error } = await supabase
         .from('bot_settings')
-        .upsert({
-          user_id: user.id,
-          is_active: settings.isActive,
-          max_positions: settings.maxPositions,
-          position_size_percent: settings.positionSizePercent,
-          stop_loss_percent: settings.stopLossPercent,
-          take_profit_percent: settings.takeProfitPercent,
-          daily_loss_limit_percent: settings.dailyLossLimitPercent,
-          min_signal_strength: settings.minSignalStrength,
-          timeframe: settings.timeframe,
-          trading_pairs: settings.tradingPairs,
-          is_demo: true // default to demo mode
-        });
+        .upsert(dataToSave);
 
-      if (error) throw error;
+      console.log('Upsert result - data:', data, 'error:', error);
 
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+
+      console.log('Settings saved successfully');
       toast({
         title: "Настройки сохранены",
         description: "Параметры торгового робота обновлены",
       });
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error('Error saving settings - full error object:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
       toast({
         title: "Ошибка",
-        description: "Не удалось сохранить настройки",
+        description: `Не удалось сохранить настройки: ${error.message}`,
         variant: "destructive",
       });
     } finally {

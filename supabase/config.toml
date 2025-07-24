@@ -1,1 +1,10 @@
 project_id = "bemevsvoentrlojsxsdp"
+
+[functions.bybit-api]
+verify_jwt = false
+
+[functions.tokenmetrics-api]
+verify_jwt = false
+
+[functions.trading-bot]
+verify_jwt = false

@@ -58,9 +58,24 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
         setKeys({
           bybitApiKey: data.api_key || "",
           bybitApiSecret: data.api_secret || "",
-          tokenMetricsKey: "", // TokenMetrics ключ сохраняем отдельно
+          tokenMetricsKey: "", // Will load separately
         });
         setIsConnected(true);
+      }
+
+      // Load TokenMetrics key separately
+      const { data: tmData } = await supabase
+        .from('tokenmetrics_credentials')
+        .select('api_key')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (tmData) {
+        setKeys(prev => ({
+          ...prev,
+          tokenMetricsKey: tmData.api_key || "",
+        }));
       }
     } catch (error) {
       console.error('Error loading API keys:', error);
@@ -68,10 +83,10 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
   };
 
   const handleSaveKeys = async () => {
-    if (!keys.bybitApiKey || !keys.bybitApiSecret) {
+    if (!keys.bybitApiKey || !keys.bybitApiSecret || !keys.tokenMetricsKey) {
       toast({
         title: "Ошибка",
-        description: "Заполните API ключи Bybit",
+        description: "Заполните все API ключи",
         variant: "destructive",
       });
       return;
@@ -98,8 +113,8 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
         .eq('user_id', user.id)
         .eq('is_demo', isDemo);
 
-      // Insert new credentials
-      const { error } = await supabase
+      // Insert new Bybit credentials
+      const { error: bybitError } = await supabase
         .from('api_credentials')
         .insert({
           user_id: user.id,
@@ -110,14 +125,28 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
           is_active: true,
         });
 
-      if (error) {
-        throw error;
-      }
+      if (bybitError) throw bybitError;
+
+      // Handle TokenMetrics credentials
+      await supabase
+        .from('tokenmetrics_credentials')
+        .update({ is_active: false })
+        .eq('user_id', user.id);
+
+      const { error: tmError } = await supabase
+        .from('tokenmetrics_credentials')
+        .insert({
+          user_id: user.id,
+          api_key: keys.tokenMetricsKey,
+          is_active: true,
+        });
+
+      if (tmError) throw tmError;
 
       setIsConnected(true);
       toast({
         title: "API ключи сохранены",
-        description: `Подключение к ${isDemo ? "демо" : "реальному"} счету Bybit успешно`,
+        description: `Подключение к ${isDemo ? "демо" : "реальному"} счету Bybit и TokenMetrics успешно`,
       });
 
       // Test connection

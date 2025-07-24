@@ -140,6 +140,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tokenmetrics_credentials: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       trades: {
         Row: {
           closed_at: string | null

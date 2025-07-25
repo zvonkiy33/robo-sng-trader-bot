@@ -108,6 +108,49 @@ export function TradingDashboard() {
     }
   };
 
+  const handleTestSignals = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      console.log('Testing signals for user:', user.id);
+      
+      const response = await supabase.functions.invoke('trading-bot', {
+        body: {
+          user_id: user.id,
+          action: 'get_signals',
+          data: {
+            is_demo: isDemo
+          }
+        }
+      });
+
+      console.log('Test signals response:', response);
+      
+      if (response.error) {
+        toast({
+          title: "Ошибка тестирования",
+          description: response.error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Тест сигналов",
+          description: "Проверьте логи в консоли и edge функций",
+        });
+      }
+    } catch (error) {
+      console.error('Test signals error:', error);
+      toast({
+        title: "Ошибка",
+        description: "Ошибка при тестировании сигналов",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -137,6 +180,14 @@ export function TradingDashboard() {
                 className="min-w-[120px]"
               >
                 {loading ? "..." : (isBotActive ? "Остановить" : "Запустить")}
+              </Button>
+              <Button
+                onClick={handleTestSignals}
+                disabled={loading}
+                variant="outline"
+                size="sm"
+              >
+                Тест сигналов
               </Button>
               <Badge variant={isBotActive ? "default" : "secondary"}>
                 <Activity className="w-3 h-3 mr-1" />

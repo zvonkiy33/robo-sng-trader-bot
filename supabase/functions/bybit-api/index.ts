@@ -156,6 +156,31 @@ Deno.serve(async (req) => {
         }
         break
 
+      case 'get_kline_data':
+        {
+          // Historical price data - no authentication required for public data
+          const symbol = data.symbol || 'BTCUSDT'
+          const interval = data.interval || '1h' // 1m, 5m, 15m, 30m, 1h, 4h, 1d, etc.
+          const limit = data.limit || 200 // Max 1000
+          const startTime = data.startTime // Optional timestamp
+          const endTime = data.endTime // Optional timestamp
+
+          let url = `${baseUrl}/v5/market/kline?category=spot&symbol=${symbol}&interval=${interval}&limit=${limit}`
+          if (startTime) url += `&start=${startTime}`
+          if (endTime) url += `&end=${endTime}`
+
+          console.log(`Fetching kline data from: ${url}`)
+
+          const response = await fetch(url, {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+
+          result = await response.json()
+        }
+        break
+
       default:
         throw new Error(`Unknown action: ${action}`)
     }

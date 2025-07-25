@@ -10,6 +10,7 @@ import { ApiKeysSetup } from "./ApiKeysSetup";
 import { BotSettings } from "./BotSettings";
 import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
+import { PriceChart } from "./PriceChart";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -199,10 +200,14 @@ export function TradingDashboard() {
 
         {/* Main Content */}
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="dashboard" className="flex items-center space-x-2">
               <TrendingUp className="w-4 h-4" />
               <span>Дашборд</span>
+            </TabsTrigger>
+            <TabsTrigger value="chart" className="flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4" />
+              <span>График</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center space-x-2">
               <Settings className="w-4 h-4" />
@@ -227,6 +232,10 @@ export function TradingDashboard() {
 
             {/* API Keys Setup */}
             <ApiKeysSetup isDemo={isDemo} />
+          </TabsContent>
+
+          <TabsContent value="chart">
+            <PriceChart />
           </TabsContent>
 
           <TabsContent value="settings">

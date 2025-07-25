@@ -176,7 +176,32 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     throw new Error(signalsResult.error)
   }
 
-  const signals = signalsResult.data.signals || []
+  // Extract and convert TokenMetrics data to trading signals
+  const tokenMetricsData = signalsResult.data.data || []
+  const signals = []
+  
+  // Convert TokenMetrics data to trading signals
+  for (const item of tokenMetricsData) {
+    if (item.TOKEN_SYMBOL && settings.trading_pairs.includes(item.TOKEN_SYMBOL + 'USDT')) {
+      const signal = {
+        symbol: item.TOKEN_SYMBOL + 'USDT',
+        signal: item.TRADING_SIGNAL === 1 ? 'BUY' : item.TRADING_SIGNAL === -1 ? 'SELL' : 'HOLD',
+        confidence: item.TM_TRADER_GRADE / 100, // Convert to 0-1 scale
+        timestamp: item.DATE,
+        target_price: null,
+        current_price: null,
+        reason: `TokenMetrics AI analysis - Grade: ${item.TM_TRADER_GRADE}, Trend: ${item.TOKEN_TREND === 1 ? 'Bullish' : 'Bearish'}`
+      }
+      
+      // Only add buy/sell signals (not hold)
+      if (signal.signal !== 'HOLD') {
+        signals.push(signal)
+      }
+    }
+  }
+  
+  console.log(`Converted ${signals.length} signals from ${tokenMetricsData.length} TokenMetrics data points`)
+  
   const processedSignals = []
 
   for (const signal of signals) {

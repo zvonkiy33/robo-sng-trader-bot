@@ -146,7 +146,7 @@ export function BotSettings() {
                     onValueChange={(value) => 
                       setSettings({ ...settings, maxPositions: value[0] })
                     }
-                    max={5}
+                    max={10}
                     min={1}
                     step={1}
                     className="flex-1"
@@ -155,6 +155,10 @@ export function BotSettings() {
                     {settings.maxPositions}
                   </Badge>
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  Больше позиций = выше потенциальная прибыль, но больше риска. 
+                  Рекомендуется: 2-5 позиций для начинающих, до 10 для опытных трейдеров.
+                </p>
               </div>
 
               <div className="space-y-2">

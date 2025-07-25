@@ -199,28 +199,49 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     }
   }
   
-  console.log(`Converted ${signals.length} signals from ${tokenMetricsData.length} TokenMetrics data points`)
+  console.log(`🔍 Обработано ${signals.length} сигналов из ${tokenMetricsData.length} TokenMetrics записей`)
+  console.log(`📋 Найденные сигналы:`)
+  signals.forEach(signal => {
+    console.log(`  - ${signal.symbol}: ${signal.signal} (сила: ${(signal.confidence * 100).toFixed(0)}%)`)
+  })
+  console.log(``)
+  
+  console.log(`🚀 НАЧИНАЕМ АНАЛИЗ СИГНАЛОВ НА ИСПОЛНЕНИЕ`)
   
   const processedSignals = []
 
   for (const signal of signals) {
+    console.log(``)
+    console.log(`🔍 Анализ сигнала: ${signal.symbol} (${signal.signal})`)
+    
     // Filter signals by minimum strength
     if (signal.confidence < settings.min_signal_strength) {
-      console.log(`Signal ignored: ${signal.symbol} confidence ${signal.confidence} below threshold ${settings.min_signal_strength}`)
+      console.log(`❌ ОТКЛОНЕН: сила сигнала ${(signal.confidence * 100).toFixed(0)}% < ${(settings.min_signal_strength * 100).toFixed(0)}%`)
       continue
     }
+    console.log(`✅ Сила сигнала достаточная: ${(signal.confidence * 100).toFixed(0)}%`)
 
     // Check if we have capacity for new positions
     const { data: openTrades } = await supabase
       .from('trades')
-      .select('id')
+      .select('id, symbol')
       .eq('user_id', user_id)
       .eq('status', 'OPEN')
 
     if (openTrades && openTrades.length >= settings.max_positions) {
-      console.log(`Signal ignored: ${signal.symbol} - maximum positions reached (${openTrades.length}/${settings.max_positions})`)
+      console.log(`❌ ОТКЛОНЕН: достигнут лимит позиций (${openTrades.length}/${settings.max_positions})`)
+      console.log(`   Открытые позиции: ${openTrades.map(t => t.symbol).join(', ')}`)
       continue
     }
+    console.log(`✅ Есть место для новой позиции: ${openTrades?.length || 0}/${settings.max_positions}`)
+
+    // Check if we already have position on this symbol
+    const existingPosition = openTrades?.find(trade => trade.symbol === signal.symbol)
+    if (existingPosition) {
+      console.log(`❌ ОТКЛОНЕН: уже есть открытая позиция по ${signal.symbol}`)
+      continue
+    }
+    console.log(`✅ Нет открытых позиций по ${signal.symbol}`)
 
     // Check daily loss limit
     const today = new Date().toISOString().split('T')[0]
@@ -237,13 +258,30 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     const dailyLossLimit = userBalance * (settings.daily_loss_limit_percent / 100)
 
     if (dailyPnL < -dailyLossLimit) {
-      console.log(`Signal ignored: ${signal.symbol} - daily loss limit exceeded (${dailyPnL} < -${dailyLossLimit})`)
+      console.log(`❌ ОТКЛОНЕН: превышен дневной лимит потерь (${dailyPnL.toFixed(2)} < -${dailyLossLimit.toFixed(2)})`)
+      continue
+    }
+    console.log(`✅ Дневные потери в пределах нормы: ${dailyPnL.toFixed(2)} / -${dailyLossLimit.toFixed(2)}`)
+
+    // Only process BUY and SELL signals, skip HOLD
+    if (signal.signal === 'HOLD') {
+      console.log(`ℹ️  HOLD сигнал - не исполняется автоматически`)
+      processedSignals.push({
+        ...signal,
+        status: 'EXECUTED',
+        trade_id: null,
+        reason: `Signal executed automatically (${(signal.confidence * 100).toFixed(0)}% confidence)`
+      })
       continue
     }
 
-    // Automatically execute qualifying signals
+    // Automatically execute qualifying BUY/SELL signals
     try {
-      console.log(`Auto-executing signal for ${signal.symbol} (confidence: ${(signal.confidence * 100).toFixed(0)}%)`)
+      console.log(`🚀 ИСПОЛНЯЕТСЯ: ${signal.signal} ${signal.symbol} (сила: ${(signal.confidence * 100).toFixed(0)}%)`)
+      console.log(`   Планируемые параметры:`)
+      console.log(`   - Размер: ${settings.position_size_percent}% от депозита`)
+      console.log(`   - Стоп-лосс: ${settings.stop_loss_percent}%`)
+      console.log(`   - Тейк-профит: ${settings.take_profit_percent}%`)
       
       const executeResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/trading-bot`, {
         method: 'POST',

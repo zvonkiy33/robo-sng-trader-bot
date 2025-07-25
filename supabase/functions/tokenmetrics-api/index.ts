@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
 
     console.log(`Using API key: ${credentials.api_key.substring(0, 10)}...`)
 
-    const baseUrl = 'https://api.tokenmetrics.com'
+    const baseUrl = 'https://api.tokenmetrics.com/v2'
     let result = {}
 
     switch (action) {
@@ -50,8 +50,7 @@ Deno.serve(async (req) => {
           console.log(`Making TokenMetrics API call to: ${baseUrl}/trading-signals`)
           console.log(`Symbols: ${symbols.join(',')}`)
           
-          
-          const response = await fetch(`${baseUrl}/trading-signals?symbol=${symbols.join(',')}&signal=all`, {
+          const response = await fetch(`${baseUrl}/trading-signals?symbol=${symbols.join(',')}`, {
             method: 'GET',
             headers: {
               'x-api-key': credentials.api_key,

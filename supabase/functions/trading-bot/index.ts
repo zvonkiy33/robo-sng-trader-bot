@@ -159,6 +159,7 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
       user_id,
       action: 'get_signals',
       data: {
+        is_demo: settings.is_demo,
         symbols: settings.trading_pairs.map((pair: string) => pair.replace('USDT', '')),
         timeframe: settings.timeframe || '15m'
       }

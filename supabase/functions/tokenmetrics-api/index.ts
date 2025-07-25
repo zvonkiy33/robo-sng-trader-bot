@@ -46,27 +46,17 @@ Deno.serve(async (req) => {
       case 'get_signals':
         {
           const symbols = data?.symbols || ['BTC', 'ETH']
-          const timeframe = data?.timeframe || '15m'
           
-          console.log(`Making TokenMetrics API call to: ${baseUrl}/v1/signals`)
-          console.log(`Symbols: ${symbols}, Timeframe: ${timeframe}`)
+          console.log(`Making TokenMetrics API call to: ${baseUrl}/trading-signals`)
+          console.log(`Symbols: ${symbols.join(',')}`)
           
-          const requestBody = {
-            symbols,
-            timeframe,
-            signal_types: ['buy', 'sell'],
-            min_confidence: 0.7
-          }
           
-          console.log(`Request body:`, JSON.stringify(requestBody, null, 2))
-          
-          const response = await fetch(`${baseUrl}/v1/signals`, {
-            method: 'POST',
+          const response = await fetch(`${baseUrl}/trading-signals?symbol=${symbols.join(',')}&signal=all`, {
+            method: 'GET',
             headers: {
               'x-api-key': credentials.api_key,
               'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody)
+            }
           })
 
           console.log(`TokenMetrics API response status: ${response.status}`)

@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
           const response = await fetch(`${baseUrl}/v1/signals`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${credentials.api_key}`,
+              'x-api-key': credentials.api_key,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(requestBody)

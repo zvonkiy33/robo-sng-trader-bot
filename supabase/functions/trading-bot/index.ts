@@ -80,7 +80,7 @@ async function startTradingBot(supabase: any, user_id: string, data: any) {
     stop_loss_percent: 2.00,
     take_profit_percent: 4.00,
     daily_loss_limit_percent: 5.00,
-    min_signal_strength: 0.70,
+    min_signal_strength: 0.50, // Снизил с 0.70 до 0.50 (50%)
     timeframe: '15m',
     trading_pairs: ['BTCUSDT', 'ETHUSDT']
   }
@@ -190,13 +190,12 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
         timestamp: item.DATE,
         target_price: null,
         current_price: null,
-        reason: `TokenMetrics AI analysis - Grade: ${item.TM_TRADER_GRADE}, Trend: ${item.TOKEN_TREND === 1 ? 'Bullish' : 'Bearish'}`
+        reason: `TokenMetrics AI analysis - Grade: ${item.TM_TRADER_GRADE}, Trend: ${item.TOKEN_TREND === 1 ? 'Bullish' : 'Bearish'}, Signal: ${item.TRADING_SIGNAL}`
       }
       
-      // Only add buy/sell signals (not hold)
-      if (signal.signal !== 'HOLD') {
-        signals.push(signal)
-      }
+      // Add all signals for now (including HOLD) to see what data we get
+      signals.push(signal)
+      console.log(`Added signal: ${signal.symbol}, Type: ${signal.signal}, Grade: ${item.TM_TRADER_GRADE}, Trading Signal: ${item.TRADING_SIGNAL}`)
     }
   }
   

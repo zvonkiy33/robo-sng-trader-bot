@@ -160,15 +160,24 @@ Deno.serve(async (req) => {
         {
           // Historical price data - no authentication required for public data
           const symbol = data.symbol || 'BTCUSDT'
-          const interval = data.interval || '1h' // 1m, 5m, 15m, 30m, 1h, 4h, 1d, etc.
+          const interval = data.interval || '60' // Use number format: 1, 5, 15, 30, 60, etc.
           const limit = data.limit || 200 // Max 1000
-          const startTime = data.startTime // Optional timestamp
-          const endTime = data.endTime // Optional timestamp
-
-          let url = `${baseUrl}/v5/market/kline?category=spot&symbol=${symbol}&interval=${interval}&limit=${limit}`
-          if (startTime) url += `&start=${startTime}`
-          if (endTime) url += `&end=${endTime}`
-
+          
+          // Convert interval to Bybit format
+          const intervalMap: Record<string, string> = {
+            '1m': '1',
+            '5m': '5', 
+            '15m': '15',
+            '30m': '30',
+            '1h': '60',
+            '4h': '240',
+            '1d': '1440'
+          }
+          
+          const bybitInterval = intervalMap[interval] || interval
+          
+          let url = `${baseUrl}/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`
+          
           console.log(`Fetching kline data from: ${url}`)
 
           const response = await fetch(url, {

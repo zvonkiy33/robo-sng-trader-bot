@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
     const { user_id, action, data } = await req.json()
 
     console.log(`TokenMetrics API request: ${action} for user ${user_id}`)
+    console.log(`Request data:`, JSON.stringify(data, null, 2))
 
     // Get user's TokenMetrics API credentials
     const { data: credentials, error: credError } = await supabase
@@ -29,9 +30,14 @@ Deno.serve(async (req) => {
       .eq('is_active', true)
       .single()
 
+    console.log(`Credentials query result:`, { credentials, credError })
+
     if (credError || !credentials) {
+      console.error('TokenMetrics credentials error:', credError)
       throw new Error('TokenMetrics API credentials not found')
     }
+
+    console.log(`Using API key: ${credentials.api_key.substring(0, 10)}...`)
 
     const baseUrl = 'https://api.tokenmetrics.com'
     let result = {}
@@ -42,25 +48,38 @@ Deno.serve(async (req) => {
           const symbols = data?.symbols || ['BTC', 'ETH']
           const timeframe = data?.timeframe || '15m'
           
+          console.log(`Making TokenMetrics API call to: ${baseUrl}/v1/signals`)
+          console.log(`Symbols: ${symbols}, Timeframe: ${timeframe}`)
+          
+          const requestBody = {
+            symbols,
+            timeframe,
+            signal_types: ['buy', 'sell'],
+            min_confidence: 0.7
+          }
+          
+          console.log(`Request body:`, JSON.stringify(requestBody, null, 2))
+          
           const response = await fetch(`${baseUrl}/v1/signals`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${credentials.api_key}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              symbols,
-              timeframe,
-              signal_types: ['buy', 'sell'],
-              min_confidence: 0.7
-            })
+            body: JSON.stringify(requestBody)
           })
 
+          console.log(`TokenMetrics API response status: ${response.status}`)
+          console.log(`TokenMetrics API response headers:`, Object.fromEntries(response.headers.entries()))
+
           if (!response.ok) {
-            throw new Error(`TokenMetrics API error: ${response.status}`)
+            const errorText = await response.text()
+            console.error(`TokenMetrics API error response:`, errorText)
+            throw new Error(`TokenMetrics API error: ${response.status} - ${errorText}`)
           }
 
           result = await response.json()
+          console.log(`TokenMetrics API success response:`, JSON.stringify(result, null, 2))
         }
         break
 

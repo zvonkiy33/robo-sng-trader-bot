@@ -143,8 +143,13 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     })
   }
 
+  console.log(`Getting signals for user ${user_id} with settings:`, JSON.stringify(settings, null, 2))
+
   // Get signals from TokenMetrics
-  const signalsResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tokenmetrics-api`, {
+  const tokenmetricsUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/tokenmetrics-api`
+  console.log(`Calling TokenMetrics API at: ${tokenmetricsUrl}`)
+  
+  const signalsResponse = await fetch(tokenmetricsUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -160,9 +165,13 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     })
   })
 
+  console.log(`TokenMetrics API response status: ${signalsResponse.status}`)
+  
   const signalsResult = await signalsResponse.json()
+  console.log(`TokenMetrics API response:`, JSON.stringify(signalsResult, null, 2))
   
   if (!signalsResult.success) {
+    console.error(`TokenMetrics API failed:`, signalsResult.error)
     throw new Error(signalsResult.error)
   }
 

@@ -45,34 +45,6 @@ Deno.serve(async (req) => {
     switch (action) {
       case 'get_signals':
         {
-          // Check if this is demo mode - if so, return mock data
-          if (data?.is_demo) {
-            console.log('Demo mode detected - returning mock signals')
-            result = {
-              signals: [
-                {
-                  symbol: 'BTCUSDT',
-                  signal: 'BUY',
-                  confidence: 0.85,
-                  timestamp: new Date().toISOString(),
-                  target_price: 44000,
-                  current_price: 43100,
-                  reason: 'Strong bullish momentum detected by AI analysis (DEMO)'
-                },
-                {
-                  symbol: 'ETHUSDT', 
-                  signal: 'BUY',
-                  confidence: 0.78,
-                  timestamp: new Date().toISOString(),
-                  target_price: 2650,
-                  current_price: 2620,
-                  reason: 'Positive market sentiment and technical indicators (DEMO)'
-                }
-              ]
-            }
-            break
-          }
-
           const symbols = data?.symbols || ['BTC', 'ETH']
           const timeframe = data?.timeframe || '15m'
           

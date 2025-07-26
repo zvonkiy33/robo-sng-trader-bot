@@ -43,6 +43,29 @@ export function TradingHistory() {
   useEffect(() => {
     if (user) {
       fetchTradingData();
+      
+      // Real-time подписка на изменения торговых сделок
+      const channel = supabase
+        .channel('trading-history-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Все события: INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'trades',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Real-time trading history update:', payload);
+            // Мгновенно обновляем историю сделок
+            fetchTradingData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user]);
 

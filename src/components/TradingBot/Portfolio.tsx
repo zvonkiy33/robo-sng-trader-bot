@@ -40,9 +40,33 @@ export function Portfolio() {
   useEffect(() => {
     if (user) {
       fetchPortfolioData();
+      
+      // Настраиваем real-time подписку на изменения сделок
+      const channel = supabase
+        .channel('trades-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Слушаем все события: INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'trades',
+            filter: `user_id=eq.${user.id}` // Только наши сделки
+          },
+          (payload) => {
+            console.log('Real-time trade update:', payload);
+            // Обновляем данные при любом изменении сделок
+            fetchPortfolioData();
+          }
+        )
+        .subscribe();
+
       // Автоматическое обновление цен каждые 30 секунд
       const interval = setInterval(fetchPortfolioData, 30000);
-      return () => clearInterval(interval);
+      
+      return () => {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      };
     }
   }, [user]);
 

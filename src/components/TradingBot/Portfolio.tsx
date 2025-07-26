@@ -90,17 +90,37 @@ export function Portfolio() {
       };
 
       const openPositions = openTrades?.map(trade => {
+        // Skip HOLD positions from P&L calculations
+        if (trade.side === 'HOLD') {
+          return {
+            symbol: trade.symbol || '',
+            side: trade.side || '',
+            size: trade.quantity || 0,
+            entryPrice: 0,
+            currentPrice: mockPrices[trade.symbol] || 0,
+            pnl: 0,
+            pnlPercent: 0,
+            stopLoss: trade.stop_loss,
+            takeProfit: trade.take_profit,
+          };
+        }
+
         const currentPrice = mockPrices[trade.symbol] || trade.price || 0;
-        const pnl = trade.side === 'BUY' 
-          ? (currentPrice - (trade.filled_price || trade.price || 0)) * (trade.quantity || 0)
-          : ((trade.filled_price || trade.price || 0) - currentPrice) * (trade.quantity || 0);
-        const pnlPercent = ((pnl / ((trade.filled_price || trade.price || 0) * (trade.quantity || 0))) * 100);
+        const entryPrice = trade.filled_price || trade.price || 0;
+        
+        // Only calculate P&L for actual trades with valid entry prices
+        const pnl = entryPrice > 0 ? (trade.side === 'BUY' 
+          ? (currentPrice - entryPrice) * (trade.quantity || 0)
+          : (entryPrice - currentPrice) * (trade.quantity || 0)) : 0;
+        
+        const pnlPercent = entryPrice > 0 && trade.quantity > 0 
+          ? ((pnl / (entryPrice * trade.quantity)) * 100) : 0;
 
         return {
           symbol: trade.symbol || '',
           side: trade.side || '',
           size: trade.quantity || 0,
-          entryPrice: trade.filled_price || trade.price || 0,
+          entryPrice,
           currentPrice,
           pnl,
           pnlPercent,

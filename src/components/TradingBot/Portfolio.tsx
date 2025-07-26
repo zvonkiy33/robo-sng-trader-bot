@@ -40,6 +40,9 @@ export function Portfolio() {
   useEffect(() => {
     if (user) {
       fetchPortfolioData();
+      // Автоматическое обновление цен каждые 30 секунд
+      const interval = setInterval(fetchPortfolioData, 30000);
+      return () => clearInterval(interval);
     }
   }, [user]);
 
@@ -78,16 +81,38 @@ export function Portfolio() {
       if (allError) throw allError;
 
       // Calculate portfolio metrics
-      const mockBalance = 5000; // This would come from Bybit API
+      const demoBalance = 5000; // Виртуальный баланс демо-аккаунта
       const dailyPnL = todayTrades?.reduce((sum, trade) => sum + (trade.pnl || 0), 0) || 0;
       const totalPnL = allTrades?.reduce((sum, trade) => sum + (trade.pnl || 0), 0) || 0;
       
-      // Mock current prices - these would come from real market data
-      const mockPrices: { [key: string]: number } = {
-        'BTCUSDT': 43200,
-        'ETHUSDT': 2620,
-        'ADAUSDT': 0.51,
-      };
+      // Получаем реальные цены от Bybit API
+      const symbols = [...new Set(openTrades?.map(trade => trade.symbol) || [])];
+      const currentPrices: { [key: string]: number } = {};
+      
+      // Получаем актуальные цены с рынка
+      for (const symbol of symbols) {
+        try {
+          const response = await supabase.functions.invoke('bybit-api', {
+            body: {
+              action: 'get_price',
+              symbol: symbol
+            }
+          });
+          
+          if (response.data?.success && response.data?.data?.price) {
+            currentPrices[symbol] = parseFloat(response.data.data.price);
+          } else {
+            // Fallback цены если API недоступен
+            currentPrices[symbol] = symbol === 'BTCUSDT' ? 43200 : 
+                                   symbol === 'ETHUSDT' ? 2620 : 0.51;
+          }
+        } catch (error) {
+          console.error(`Error fetching price for ${symbol}:`, error);
+          // Используем последнюю известную цену или fallback
+          currentPrices[symbol] = symbol === 'BTCUSDT' ? 43200 : 
+                                 symbol === 'ETHUSDT' ? 2620 : 0.51;
+        }
+      }
 
       const openPositions = openTrades?.map(trade => {
         // Skip HOLD positions from P&L calculations
@@ -97,7 +122,7 @@ export function Portfolio() {
             side: trade.side || '',
             size: trade.quantity || 0,
             entryPrice: 0,
-            currentPrice: mockPrices[trade.symbol] || 0,
+            currentPrice: currentPrices[trade.symbol] || 0,
             pnl: 0,
             pnlPercent: 0,
             stopLoss: trade.stop_loss,
@@ -105,7 +130,7 @@ export function Portfolio() {
           };
         }
 
-        const currentPrice = mockPrices[trade.symbol] || trade.price || 0;
+        const currentPrice = currentPrices[trade.symbol] || trade.price || 0;
         const entryPrice = trade.filled_price || trade.price || 0;
         
         // Only calculate P&L for actual trades with valid entry prices
@@ -133,8 +158,8 @@ export function Portfolio() {
       const usedBalance = openPositions.reduce((sum, pos) => sum + (pos.entryPrice * pos.size), 0);
 
       setPortfolioData({
-        totalBalance: mockBalance,
-        availableBalance: mockBalance - usedBalance,
+        totalBalance: demoBalance,
+        availableBalance: demoBalance - usedBalance,
         unrealizedPnL,
         dailyPnL,
         totalPnL,

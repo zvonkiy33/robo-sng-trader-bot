@@ -118,13 +118,18 @@ export function Portfolio() {
         try {
           const response = await supabase.functions.invoke('bybit-api', {
             body: {
-              action: 'get_price',
-              symbol: symbol
+              user_id: user.id,
+              is_demo: true,
+              action: 'get_kline_data',
+              data: { symbol: symbol, interval: '1m', limit: 1 }
             }
           });
           
-          if (response.data?.success && response.data?.data?.price) {
-            currentPrices[symbol] = parseFloat(response.data.data.price);
+          if (response.data?.success && response.data?.data?.result?.list?.[0]) {
+            // Bybit kline data: [startTime, openPrice, highPrice, lowPrice, closePrice, volume, turnover]
+            const klineData = response.data.data.result.list[0];
+            const closePrice = parseFloat(klineData[4]); // Close price is at index 4
+            currentPrices[symbol] = closePrice;
           } else {
             // Fallback цены если API недоступен
             currentPrices[symbol] = symbol === 'BTCUSDT' ? 43200 : 

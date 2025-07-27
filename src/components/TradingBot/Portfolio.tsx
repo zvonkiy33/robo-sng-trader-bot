@@ -76,12 +76,13 @@ export function Portfolio() {
     try {
       setLoading(true);
 
-      // Fetch open trades
+      // Fetch open trades (включая HOLD позиции)
       const { data: openTrades, error: tradesError } = await supabase
         .from('trades')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'OPEN');
+        .in('status', ['OPEN', 'FILLED'])
+        .not('price', 'is', null)  // Только трейды с заполненной ценой входа
 
       if (tradesError) throw tradesError;
 

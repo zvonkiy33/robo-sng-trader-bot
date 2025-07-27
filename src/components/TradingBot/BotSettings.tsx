@@ -1,60 +1,71 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Settings2, Shield, TrendingUp, AlertTriangle } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { AlertTriangle } from "lucide-react";
 
-export function BotSettings() {
-  const [settings, setSettings] = useState({
-    isActive: false,
-    maxPositions: 3,
-    positionSizePercent: 1,
-    stopLossPercent: 2,
-    takeProfitPercent: 4,
-    dailyLossLimitPercent: 5,
-    minSignalStrength: 0.7,
+interface BotSettingsType {
+  is_active: boolean;
+  max_positions: number;
+  position_size_percent: number;
+  stop_loss_percent: number;
+  take_profit_percent: number;
+  daily_loss_limit_percent: number;
+  min_signal_strength: number;
+  timeframe: string;
+  trading_pairs: string[];
+}
+
+export const BotSettings = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [settings, setSettings] = useState<BotSettingsType>({
+    is_active: false,
+    max_positions: 3,
+    position_size_percent: 1.0,
+    stop_loss_percent: 2.0,
+    take_profit_percent: 4.0,
+    daily_loss_limit_percent: 5.0,
+    min_signal_strength: 0.7,
     timeframe: "15m",
-    tradingPairs: ["BTCUSDT", "ETHUSDT"],
+    trading_pairs: ["BTCUSDT", "ETHUSDT"]
   });
   const [loading, setLoading] = useState(false);
 
-  const { toast } = useToast();
-  const { user } = useAuth();
-
-  // Load existing settings
-  useEffect(() => {
-    if (user) {
-      loadSettings();
-    }
-  }, [user]);
-
   const loadSettings = async () => {
+    if (!user) return;
+
     try {
       const { data, error } = await supabase
         .from('bot_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading bot settings:', error);
+        return;
+      }
 
       if (data) {
         setSettings({
-          isActive: data.is_active,
-          maxPositions: data.max_positions,
-          positionSizePercent: Number(data.position_size_percent),
-          stopLossPercent: Number(data.stop_loss_percent),
-          takeProfitPercent: Number(data.take_profit_percent),
-          dailyLossLimitPercent: Number(data.daily_loss_limit_percent),
-          minSignalStrength: Number(data.min_signal_strength),
+          is_active: data.is_active,
+          max_positions: data.max_positions,
+          position_size_percent: data.position_size_percent,
+          stop_loss_percent: data.stop_loss_percent,
+          take_profit_percent: data.take_profit_percent,
+          daily_loss_limit_percent: data.daily_loss_limit_percent,
+          min_signal_strength: data.min_signal_strength,
           timeframe: data.timeframe || "15m",
-          tradingPairs: data.trading_pairs || ["BTCUSDT", "ETHUSDT"],
+          trading_pairs: data.trading_pairs || ["BTCUSDT", "ETHUSDT"]
         });
       }
     } catch (error) {
@@ -62,58 +73,46 @@ export function BotSettings() {
     }
   };
 
-  const handleSaveSettings = async () => {
-    if (!user) {
-      console.error('No user found for saving settings');
-      return;
+  useEffect(() => {
+    if (user) {
+      loadSettings();
     }
-    
-    console.log('Starting to save settings for user:', user.id);
-    console.log('Settings to save:', settings);
-    
-    setLoading(true);
+  }, [user]);
+
+  const handleSaveSettings = async () => {
+    if (!user) return;
+
     try {
-      const dataToSave = {
-        user_id: user.id,
-        is_active: settings.isActive,
-        max_positions: settings.maxPositions,
-        position_size_percent: settings.positionSizePercent,
-        stop_loss_percent: settings.stopLossPercent,
-        take_profit_percent: settings.takeProfitPercent,
-        daily_loss_limit_percent: settings.dailyLossLimitPercent,
-        min_signal_strength: settings.minSignalStrength,
-        timeframe: settings.timeframe,
-        trading_pairs: settings.tradingPairs,
-        is_demo: true // default to demo mode
-      };
+      setLoading(true);
       
-      console.log('Data to upsert:', dataToSave);
-      
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('bot_settings')
-        .upsert(dataToSave, {
-          onConflict: 'user_id'
+        .upsert({
+          user_id: user.id,
+          is_active: settings.is_active,
+          max_positions: settings.max_positions,
+          position_size_percent: settings.position_size_percent,
+          stop_loss_percent: settings.stop_loss_percent,
+          take_profit_percent: settings.take_profit_percent,
+          daily_loss_limit_percent: settings.daily_loss_limit_percent,
+          min_signal_strength: settings.min_signal_strength,
+          timeframe: settings.timeframe,
+          trading_pairs: settings.trading_pairs,
+          is_demo: true,
+          updated_at: new Date().toISOString()
         });
 
-      console.log('Upsert result - data:', data, 'error:', error);
+      if (error) throw error;
 
-      if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
-      }
-
-      console.log('Settings saved successfully');
       toast({
         title: "Настройки сохранены",
-        description: "Параметры торгового робота обновлены",
+        description: "Настройки торгового бота успешно обновлены",
       });
     } catch (error) {
-      console.error('Error saving settings - full error object:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
+      console.error('Error saving settings:', error);
       toast({
         title: "Ошибка",
-        description: `Не удалось сохранить настройки: ${error.message}`,
+        description: "Не удалось сохранить настройки",
         variant: "destructive",
       });
     } finally {
@@ -123,100 +122,91 @@ export function BotSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Risk Management */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Shield className="w-5 h-5" />
-            <span>Управление рисками</span>
-          </CardTitle>
+          <CardTitle>Настройки торгового бота</CardTitle>
           <CardDescription>
-            Настройки безопасности и лимитов торговли
+            Конфигурируйте параметры автоматической торговли
           </CardDescription>
         </CardHeader>
-        
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Максимум позиций одновременно</Label>
-                <div className="flex items-center space-x-4">
-                  <Slider
-                    value={[settings.maxPositions]}
-                    onValueChange={(value) => 
-                      setSettings({ ...settings, maxPositions: value[0] })
-                    }
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <Badge variant="outline" className="min-w-[3rem]">
-                    {settings.maxPositions}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Больше позиций = выше потенциальная прибыль, но больше риска. 
-                  Рекомендуется: 2-5 позиций для начинающих, до 10 для опытных трейдеров.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Размер позиции (% от депозита)</Label>
-                <div className="flex items-center space-x-4">
-                  <Slider
-                    value={[settings.positionSizePercent]}
-                    onValueChange={(value) => 
-                      setSettings({ ...settings, positionSizePercent: value[0] })
-                    }
-                    max={5}
-                    min={0.5}
-                    step={0.5}
-                    className="flex-1"
-                  />
-                  <Badge variant="outline" className="min-w-[3rem]">
-                    {settings.positionSizePercent}%
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Дневной лимит потерь (%)</Label>
-                <div className="flex items-center space-x-4">
-                  <Slider
-                    value={[settings.dailyLossLimitPercent]}
-                    onValueChange={(value) => 
-                      setSettings({ ...settings, dailyLossLimitPercent: value[0] })
-                    }
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <Badge variant="destructive" className="min-w-[3rem]">
-                    -{settings.dailyLossLimitPercent}%
-                  </Badge>
-                </div>
-              </div>
+          {/* Bot Status */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="bot-active">Статус бота</Label>
+              <p className="text-sm text-muted-foreground">
+                Включить/выключить автоматическую торговлю
+              </p>
             </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="bot-active"
+                checked={settings.is_active}
+                onCheckedChange={(checked) => 
+                  setSettings(prev => ({ ...prev, is_active: checked }))
+                }
+              />
+              <Badge variant={settings.is_active ? "default" : "secondary"}>
+                {settings.is_active ? "Активен" : "Неактивен"}
+              </Badge>
+            </div>
+          </div>
 
-            <div className="space-y-4">
+          <Separator />
+
+          {/* Risk Management */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Управление рисками</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Максимум позиций</Label>
+                <div className="flex items-center space-x-4">
+                  <Slider
+                    value={[settings.max_positions]}
+                    onValueChange={(value) => 
+                      setSettings(prev => ({ ...prev, max_positions: value[0] }))
+                    }
+                    max={10}
+                    min={1}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <Badge variant="outline">{settings.max_positions}</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Размер позиции (%)</Label>
+                <div className="flex items-center space-x-4">
+                  <Slider
+                    value={[settings.position_size_percent]}
+                    onValueChange={(value) => 
+                      setSettings(prev => ({ ...prev, position_size_percent: value[0] }))
+                    }
+                    max={10}
+                    min={0.1}
+                    step={0.1}
+                    className="flex-1"
+                  />
+                  <Badge variant="outline">{settings.position_size_percent}%</Badge>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Стоп-лосс (%)</Label>
                 <div className="flex items-center space-x-4">
                   <Slider
-                    value={[settings.stopLossPercent]}
+                    value={[settings.stop_loss_percent]}
                     onValueChange={(value) => 
-                      setSettings({ ...settings, stopLossPercent: value[0] })
+                      setSettings(prev => ({ ...prev, stop_loss_percent: value[0] }))
                     }
-                    max={5}
-                    min={1}
-                    step={0.5}
+                    max={10}
+                    min={0.5}
+                    step={0.1}
                     className="flex-1"
                   />
-                  <Badge variant="destructive" className="min-w-[3rem]">
-                    -{settings.stopLossPercent}%
-                  </Badge>
+                  <Badge variant="outline">{settings.stop_loss_percent}%</Badge>
                 </div>
               </div>
 
@@ -224,131 +214,125 @@ export function BotSettings() {
                 <Label>Тейк-профит (%)</Label>
                 <div className="flex items-center space-x-4">
                   <Slider
-                    value={[settings.takeProfitPercent]}
+                    value={[settings.take_profit_percent]}
                     onValueChange={(value) => 
-                      setSettings({ ...settings, takeProfitPercent: value[0] })
+                      setSettings(prev => ({ ...prev, take_profit_percent: value[0] }))
                     }
-                    max={10}
-                    min={2}
-                    step={0.5}
+                    max={20}
+                    min={1}
+                    step={0.1}
                     className="flex-1"
                   />
-                  <Badge variant="default" className="min-w-[3rem]">
-                    +{settings.takeProfitPercent}%
-                  </Badge>
+                  <Badge variant="outline">{settings.take_profit_percent}%</Badge>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Минимальная сила сигнала</Label>
+                <Label>Дневной лимит потерь (%)</Label>
                 <div className="flex items-center space-x-4">
                   <Slider
-                    value={[settings.minSignalStrength]}
+                    value={[settings.daily_loss_limit_percent]}
                     onValueChange={(value) => 
-                      setSettings({ ...settings, minSignalStrength: value[0] })
+                      setSettings(prev => ({ ...prev, daily_loss_limit_percent: value[0] }))
                     }
-                    max={1}
-                    min={0.5}
-                    step={0.05}
+                    max={20}
+                    min={1}
+                    step={0.5}
                     className="flex-1"
                   />
-                  <Badge variant="outline" className="min-w-[3rem]">
-                    {(settings.minSignalStrength * 100).toFixed(0)}%
-                  </Badge>
+                  <Badge variant="outline">{settings.daily_loss_limit_percent}%</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Минимальная сила сигнала (%)</Label>
+                <div className="flex items-center space-x-4">
+                  <Slider
+                    value={[settings.min_signal_strength * 100]}
+                    onValueChange={(value) => 
+                      setSettings(prev => ({ ...prev, min_signal_strength: value[0] / 100 }))
+                    }
+                    max={100}
+                    min={50}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <Badge variant="outline">{Math.round(settings.min_signal_strength * 100)}%</Badge>
                 </div>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Trading Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <TrendingUp className="w-5 h-5" />
-            <span>Торговые настройки</span>
-          </CardTitle>
-          <CardDescription>
-            Параметры торговых пар и стратегии
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Таймфрейм анализа сигналов</Label>
-            <Select 
-              value={settings.timeframe} 
-              onValueChange={(value) => setSettings({ ...settings, timeframe: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите таймфрейм" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1m">1 минута (очень активная торговля)</SelectItem>
-                <SelectItem value="3m">3 минуты (активная торговля)</SelectItem>
-                <SelectItem value="5m">5 минут (частая торговля)</SelectItem>
-                <SelectItem value="15m">15 минут (рекомендуется для начинающих)</SelectItem>
-                <SelectItem value="30m">30 минут (умеренная торговля)</SelectItem>
-                <SelectItem value="1h">1 час (спокойная торговля)</SelectItem>
-                <SelectItem value="4h">4 часа (долгосрочная торговля)</SelectItem>
-                <SelectItem value="1d">1 день (позиционная торговля)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-sm text-muted-foreground">
-              Короткие таймфреймы (1-5 мин) = больше сделок, больше комиссий, выше риски. 
-              Длинные таймфреймы (1-4 часа) = меньше сделок, меньше комиссий, стабильнее сигналы.
-            </p>
-          </div>
-          
-          <div className="space-y-2">
-            <Label>Торговые пары</Label>
-            <div className="flex flex-wrap gap-2">
-              {["BTCUSDT", "ETHUSDT", "ADAUSDT", "DOTUSDT", "LINKUSDT"].map((pair) => (
-                <Badge
-                  key={pair}
-                  variant={settings.tradingPairs.includes(pair) ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => {
-                    const newPairs = settings.tradingPairs.includes(pair)
-                      ? settings.tradingPairs.filter(p => p !== pair)
-                      : [...settings.tradingPairs, pair];
-                    setSettings({ ...settings, tradingPairs: newPairs });
-                  }}
+          <Separator />
+
+          {/* Trading Settings */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Торговые настройки</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Таймфрейм сигналов</Label>
+                <Select
+                  value={settings.timeframe}
+                  onValueChange={(value) => 
+                    setSettings(prev => ({ ...prev, timeframe: value }))
+                  }
                 >
-                  {pair}
-                </Badge>
-              ))}
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5m">5 минут</SelectItem>
+                    <SelectItem value="15m">15 минут</SelectItem>
+                    <SelectItem value="30m">30 минут</SelectItem>
+                    <SelectItem value="1h">1 час</SelectItem>
+                    <SelectItem value="4h">4 часа</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Торговые пары</Label>
+                <div className="flex flex-wrap gap-2">
+                  {settings.trading_pairs.map((pair) => (
+                    <Badge key={pair} variant="outline">
+                      {pair}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Сейчас поддерживаются: BTC/USDT, ETH/USDT
+                </p>
+              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Warning */}
-      <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
-        <CardContent className="pt-6">
-          <div className="flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+          <Separator />
+
+          {/* Warning */}
+          <div className="flex items-start space-x-3 p-4 border border-orange-200 bg-orange-50 rounded-lg">
+            <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
             <div className="space-y-1">
-              <h4 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
-                Важное предупреждение
-              </h4>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                Торговля криптовалютами связана с высокими рисками. Используйте только те средства, 
-                потерю которых вы можете себе позволить. Начните с демо-счета для тестирования стратегии.
+              <p className="text-sm font-medium text-orange-800">
+                Предупреждение о рисках
+              </p>
+              <p className="text-sm text-orange-700">
+                Автоматическая торговля связана с высокими рисками. Торгуйте только теми средствами, 
+                которые можете позволить себе потерять. Прошлые результаты не гарантируют будущие прибыли.
               </p>
             </div>
           </div>
+
+          {/* Save Button */}
+          <Button 
+            onClick={handleSaveSettings}
+            disabled={loading}
+            className="w-full"
+          >
+            {loading ? "Сохранение..." : "Сохранить настройки"}
+          </Button>
         </CardContent>
       </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSaveSettings} size="lg" disabled={loading}>
-          <Settings2 className="w-4 h-4 mr-2" />
-          {loading ? "Сохранение..." : "Сохранить настройки"}
-        </Button>
-      </div>
     </div>
   );
-}
+};

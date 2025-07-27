@@ -253,8 +253,33 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
 
     const dailyPnL = todayTrades?.reduce((sum: number, trade: any) => sum + (trade.pnl || 0), 0) || 0
     
-    // Get user balance for percentage calculation (mock for now)
-    const userBalance = 5000 // This should come from Bybit API
+    // Get user balance from Bybit API
+    let userBalance = 5000; // Default fallback
+    try {
+      const balanceResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+        },
+        body: JSON.stringify({
+          user_id,
+          is_demo: settings.is_demo,
+          action: 'get_balance'
+        })
+      });
+
+      const balanceResult = await balanceResponse.json();
+      if (balanceResult.success && balanceResult.data.result?.list?.[0]) {
+        const usdtBalance = balanceResult.data.result.list[0].coin.find((c: any) => c.coin === 'USDT');
+        if (usdtBalance) {
+          userBalance = parseFloat(usdtBalance.availableToWithdraw) || 5000;
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch balance, using default:', error.message);
+    }
+    
     const dailyLossLimit = userBalance * (settings.daily_loss_limit_percent / 100)
 
     if (dailyPnL < -dailyLossLimit) {
@@ -351,8 +376,34 @@ async function executeTrade(supabase: any, user_id: string, data: any) {
 
     if (settingsError) throw settingsError
 
+    // Get user balance from Bybit API
+    let userBalance = 5000; // Default fallback
+    try {
+      const balanceResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+        },
+        body: JSON.stringify({
+          user_id,
+          is_demo: data.is_demo,
+          action: 'get_balance'
+        })
+      });
+
+      const balanceResult = await balanceResponse.json();
+      if (balanceResult.success && balanceResult.data.result?.list?.[0]) {
+        const usdtBalance = balanceResult.data.result.list[0].coin.find((c: any) => c.coin === 'USDT');
+        if (usdtBalance) {
+          userBalance = parseFloat(usdtBalance.availableToWithdraw) || 5000;
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch balance, using default:', error.message);
+    }
+    
     // Calculate position size
-    const userBalance = 5000 // This should come from Bybit API
     const positionSize = userBalance * (settings.position_size_percent / 100)
     const quantity = signal.signal === 'BUY' 
       ? positionSize / signal.current_price 

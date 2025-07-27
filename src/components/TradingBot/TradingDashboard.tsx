@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Activity, Settings, TrendingUp, Wallet } from "lucide-react";
 import { ApiKeysSetup } from "./ApiKeysSetup";
 import { BotSettings } from "./BotSettings";
+import PositionMonitor from "./PositionMonitor";
 import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
 import { PriceChart } from "./PriceChart";
@@ -155,6 +156,9 @@ export function TradingDashboard() {
 
   return (
     <div className="min-h-screen bg-background p-6">
+      {/* Фоновый мониторинг позиций */}
+      <PositionMonitor />
+      
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

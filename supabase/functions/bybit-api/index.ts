@@ -176,7 +176,9 @@ Deno.serve(async (req) => {
           
           const bybitInterval = intervalMap[interval] || interval
           
-          let url = `${baseUrl}/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`
+          // ALWAYS use mainnet for price data (real prices)
+          const publicUrl = 'https://api.bybit.com'
+          let url = `${publicUrl}/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`
           
           console.log(`Fetching kline data from: ${url}`)
 

@@ -21,18 +21,20 @@ Deno.serve(async (req) => {
 
     console.log(`Bybit API request: ${action} for user ${user_id}`)
 
-    // Get user's Bybit API credentials
-    const { data: credentials, error: credError } = await supabase
-      .from('api_credentials')
-      .select('api_key, api_secret')
-      .eq('user_id', user_id)
-      .eq('is_demo', is_demo)
-      .eq('is_active', true)
-      .single()
+    // Get user's API credentials using secure function
+    const { data: credentialsResult, error: credError } = await supabase
+      .rpc('get_decrypted_credentials', {
+        p_user_id: user_id,
+        p_exchange: 'bybit',
+        p_is_demo: is_demo || true
+      })
 
-    if (credError || !credentials) {
-      throw new Error('API credentials not found')
+    if (credError || !credentialsResult || credentialsResult.length === 0) {
+      console.error('Credentials error:', credError)
+      throw new Error('Bybit API credentials not found')
     }
+
+    const credentials = credentialsResult[0]
 
     const baseUrl = is_demo ? 'https://api-testnet.bybit.com' : 'https://api.bybit.com'
 
@@ -80,7 +82,7 @@ Deno.serve(async (req) => {
           
           const signature = await generateSignature(params, credentials.api_secret)
           
-          const response = await fetch(`${baseUrl}/v5/account/wallet-balance?${new URLSearchParams({
+          result = await callBybitWithRetry(`${baseUrl}/v5/account/wallet-balance?${new URLSearchParams({
             ...params,
             api_key: credentials.api_key,
             timestamp: params.timestamp,
@@ -94,8 +96,6 @@ Deno.serve(async (req) => {
               'X-BAPI-SIGN': signature,
             }
           })
-
-          result = await response.json()
         }
         break
 
@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 
           const signature = await generateSignature(orderParams, credentials.api_secret)
 
-          const response = await fetch(`${baseUrl}/v5/order/create`, {
+          result = await callBybitWithRetry(`${baseUrl}/v5/order/create`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -123,8 +123,6 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify(orderParams)
           })
-
-          result = await response.json()
         }
         break
 
@@ -137,7 +135,7 @@ Deno.serve(async (req) => {
 
           const signature = await generateSignature(params, credentials.api_secret)
 
-          const response = await fetch(`${baseUrl}/v5/position/list?${new URLSearchParams({
+          result = await callBybitWithRetry(`${baseUrl}/v5/position/list?${new URLSearchParams({
             ...params,
             api_key: credentials.api_key,
             timestamp: params.timestamp,
@@ -151,8 +149,6 @@ Deno.serve(async (req) => {
               'X-BAPI-SIGN': signature,
             }
           })
-
-          result = await response.json()
         }
         break
 
@@ -182,13 +178,11 @@ Deno.serve(async (req) => {
           
           console.log(`Fetching kline data from: ${url}`)
 
-          const response = await fetch(url, {
+          result = await callBybitWithRetry(url, {
             headers: {
               'Content-Type': 'application/json'
             }
           })
-
-          result = await response.json()
         }
         break
 
@@ -214,3 +208,64 @@ Deno.serve(async (req) => {
     })
   }
 })
+
+// Retry logic with proper error handling
+async function callBybitWithRetry(url: string, options: RequestInit, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempt ${attempt} calling: ${url}`)
+      
+      const response = await fetch(url, options)
+      
+      // Check if response is OK
+      if (!response.ok) {
+        const textResponse = await response.text()
+        console.error(`HTTP ${response.status}: ${textResponse}`)
+        
+        // Check if it's an HTML error page (server maintenance)
+        if (textResponse.includes('DOCTYPE') || textResponse.includes('<html>')) {
+          throw new Error(`Bybit API unavailable (HTTP ${response.status}): Server returned HTML instead of JSON`)
+        }
+        
+        // Try to parse as JSON for API errors
+        try {
+          const errorData = JSON.parse(textResponse)
+          throw new Error(`Bybit API error (HTTP ${response.status}): ${errorData.retMsg || textResponse}`)
+        } catch {
+          throw new Error(`Bybit API error (HTTP ${response.status}): ${textResponse}`)
+        }
+      }
+      
+      // Parse JSON response
+      const jsonResponse = await response.json()
+      
+      // Check for Bybit API errors in successful HTTP responses
+      if (jsonResponse.retCode && jsonResponse.retCode !== 0) {
+        throw new Error(`Bybit API error (Code ${jsonResponse.retCode}): ${jsonResponse.retMsg}`)
+      }
+      
+      console.log(`Success on attempt ${attempt}`)
+      return jsonResponse
+      
+    } catch (error) {
+      console.error(`Attempt ${attempt} failed:`, error.message)
+      
+      // Don't retry on authentication or API key errors
+      if (error.message.includes('invalid API key') || 
+          error.message.includes('authentication') ||
+          error.message.includes('unauthorized')) {
+        throw error
+      }
+      
+      // If this was the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw new Error(`Bybit API failed after ${maxRetries} attempts: ${error.message}`)
+      }
+      
+      // Exponential backoff: wait 1s, 2s, 4s...
+      const delay = Math.pow(2, attempt - 1) * 1000
+      console.log(`Waiting ${delay}ms before retry...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+}

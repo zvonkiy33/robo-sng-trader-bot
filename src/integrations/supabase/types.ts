@@ -23,6 +23,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_demo: boolean
+          is_encrypted: boolean | null
           updated_at: string
           user_id: string
         }
@@ -34,6 +35,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_demo?: boolean
+          is_encrypted?: boolean | null
           updated_at?: string
           user_id: string
         }
@@ -45,6 +47,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_demo?: boolean
+          is_encrypted?: boolean | null
           updated_at?: string
           user_id?: string
         }
@@ -274,8 +277,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decrypt_api_credential: {
+        Args: { encrypted_credential: string }
+        Returns: string
+      }
+      encrypt_api_credential: {
+        Args: { credential_text: string }
+        Returns: string
+      }
       execute_trading_bot_automation: {
         Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      get_decrypted_credentials: {
+        Args: { p_user_id: string; p_exchange?: string; p_is_demo?: boolean }
+        Returns: {
+          api_key: string
+          api_secret: string
+        }[]
+      }
+      update_api_credentials_secure: {
+        Args: {
+          p_user_id: string
+          p_api_key: string
+          p_api_secret: string
+          p_exchange?: string
+          p_is_demo?: boolean
+        }
         Returns: undefined
       }
     }

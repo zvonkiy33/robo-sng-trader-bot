@@ -113,17 +113,14 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
         .eq('user_id', user.id)
         .eq('is_demo', isDemo);
 
-      // Insert new Bybit credentials
-      const { error: bybitError } = await supabase
-        .from('api_credentials')
-        .insert({
-          user_id: user.id,
-          exchange: 'bybit',
-          api_key: keys.bybitApiKey,
-          api_secret: keys.bybitApiSecret,
-          is_demo: isDemo,
-          is_active: true,
-        });
+      // Insert new Bybit credentials using secure function
+      const { error: bybitError } = await supabase.rpc('update_api_credentials_secure', {
+        p_user_id: user.id,
+        p_api_key: keys.bybitApiKey,
+        p_api_secret: keys.bybitApiSecret,
+        p_exchange: 'bybit',
+        p_is_demo: isDemo
+      });
 
       if (bybitError) throw bybitError;
 

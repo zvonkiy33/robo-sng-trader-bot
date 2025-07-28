@@ -9,6 +9,7 @@ import { Activity, Settings, TrendingUp, Wallet } from "lucide-react";
 import { ApiKeysSetup } from "./ApiKeysSetup";
 import { BotSettings } from "./BotSettings";
 import PositionMonitor from "./PositionMonitor";
+import AutomatedTrading from "./AutomatedTrading";
 import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
 import { PriceChart } from "./PriceChart";
@@ -158,6 +159,9 @@ export function TradingDashboard() {
     <div className="min-h-screen bg-background p-6">
       {/* Фоновый мониторинг позиций */}
       <PositionMonitor />
+      
+      {/* Автоматическая торговля */}
+      <AutomatedTrading isActive={isBotActive} isDemo={isDemo} />
       
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}

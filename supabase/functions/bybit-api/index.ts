@@ -38,8 +38,8 @@ Deno.serve(async (req) => {
 
     const baseUrl = is_demo ? 'https://api-testnet.bybit.com' : 'https://api.bybit.com'
 
-    // Generate signature for Bybit API
-    function generateSignature(params: Record<string, any>, apiSecret: string) {
+    // Generate signature for Bybit V5 API
+    async function generateSignature(params: Record<string, any>, apiSecret: string) {
       const timestamp = Date.now().toString()
       const recv_window = '5000'
       
@@ -47,27 +47,32 @@ Deno.serve(async (req) => {
       params.timestamp = timestamp
       params.recv_window = recv_window
 
+      // For Bybit V5, the signature format is: timestamp + api_key + recv_window + queryString
       const paramString = Object.keys(params)
         .sort()
         .map(key => `${key}=${params[key]}`)
         .join('&')
+      
+      const signString = timestamp + credentials.api_key + recv_window + paramString
+      console.log(`Bybit signature string: ${signString}`)
 
       const encoder = new TextEncoder()
-      const data = encoder.encode(paramString + apiSecret)
       
-      return crypto.subtle.importKey(
+      const key = await crypto.subtle.importKey(
         'raw',
         encoder.encode(apiSecret),
         { name: 'HMAC', hash: 'SHA-256' },
         false,
         ['sign']
-      ).then(key => 
-        crypto.subtle.sign('HMAC', key, encoder.encode(paramString))
-      ).then(signature => 
-        Array.from(new Uint8Array(signature))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('')
       )
+      
+      const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(signString))
+      const hexSignature = Array.from(new Uint8Array(signature))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+      
+      console.log(`Generated signature: ${hexSignature}`)
+      return hexSignature
     }
 
     let result = {}

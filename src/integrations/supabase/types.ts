@@ -272,6 +272,63 @@ export type Database = {
         }
         Relationships: []
       }
+      trading_signals: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          holding_returns: number | null
+          id: string
+          investor_grade: number | null
+          signal_date: string | null
+          tm_link: string | null
+          token_id: number | null
+          token_name: string | null
+          token_symbol: string | null
+          token_trend: number | null
+          trader_grade: number | null
+          trading_signal: number | null
+          trading_signals_returns: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          holding_returns?: number | null
+          id?: string
+          investor_grade?: number | null
+          signal_date?: string | null
+          tm_link?: string | null
+          token_id?: number | null
+          token_name?: string | null
+          token_symbol?: string | null
+          token_trend?: number | null
+          trader_grade?: number | null
+          trading_signal?: number | null
+          trading_signals_returns?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          holding_returns?: number | null
+          id?: string
+          investor_grade?: number | null
+          signal_date?: string | null
+          tm_link?: string | null
+          token_id?: number | null
+          token_name?: string | null
+          token_symbol?: string | null
+          token_trend?: number | null
+          trader_grade?: number | null
+          trading_signal?: number | null
+          trading_signals_returns?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

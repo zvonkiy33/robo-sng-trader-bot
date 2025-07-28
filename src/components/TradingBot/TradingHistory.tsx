@@ -29,9 +29,23 @@ interface TradingStats {
   profitableTrades: number;
 }
 
+interface TradingSignal {
+  id: string;
+  token_symbol: string | null;
+  token_name: string | null;
+  trading_signal: number | null; // 1=BUY, -1=SELL, 0=HOLD
+  token_trend: number | null; // 1=BULLISH, -1=BEARISH, 0=NEUTRAL
+  trader_grade: number | null;
+  investor_grade: number | null;
+  confidence: number | null;
+  signal_date: string | null;
+  created_at: string;
+}
+
 export function TradingHistory() {
   const { user } = useAuth();
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [stats, setStats] = useState<TradingStats>({
     totalTrades: 0,
     winRate: 0,
@@ -39,13 +53,15 @@ export function TradingHistory() {
     profitableTrades: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [signalsLoading, setSignalsLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       fetchTradingData();
+      fetchSignalsData();
       
       // Real-time подписка на изменения торговых сделок
-      const channel = supabase
+      const tradesChannel = supabase
         .channel('trading-history-realtime')
         .on(
           'postgres_changes',
@@ -63,8 +79,27 @@ export function TradingHistory() {
         )
         .subscribe();
 
+      // Real-time подписка на изменения сигналов
+      const signalsChannel = supabase
+        .channel('trading-signals-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'trading_signals',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Real-time signals update:', payload);
+            fetchSignalsData();
+          }
+        )
+        .subscribe();
+
       return () => {
-        supabase.removeChannel(channel);
+        supabase.removeChannel(tradesChannel);
+        supabase.removeChannel(signalsChannel);
       };
     }
   }, [user]);
@@ -111,6 +146,30 @@ export function TradingHistory() {
     }
   };
 
+  const fetchSignalsData = async () => {
+    if (!user) return;
+
+    try {
+      setSignalsLoading(true);
+
+      const { data: signalsData, error: signalsError } = await supabase
+        .from('trading_signals')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (signalsError) throw signalsError;
+
+      setSignals(signalsData || []);
+
+    } catch (error) {
+      console.error('Error fetching signals data:', error);
+    } finally {
+      setSignalsLoading(false);
+    }
+  };
+
   const formatDuration = (createdAt: string, closedAt?: string) => {
     if (!closedAt) return 'N/A';
     
@@ -131,6 +190,18 @@ export function TradingHistory() {
     if (!trade.pnl || !trade.filled_price) return 0;
     const investment = trade.filled_price * trade.quantity;
     return (trade.pnl / investment) * 100;
+  };
+
+  const getSignalBadge = (signal: number | null) => {
+    if (signal === 1) return { text: 'BUY', variant: 'default' as const };
+    if (signal === -1) return { text: 'SELL', variant: 'destructive' as const };
+    return { text: 'HOLD', variant: 'secondary' as const };
+  };
+
+  const getTrendIcon = (trend: number | null) => {
+    if (trend === 1) return <TrendingUp className="w-4 h-4 text-success" />;
+    if (trend === -1) return <TrendingDown className="w-4 h-4 text-destructive" />;
+    return <Activity className="w-4 h-4 text-muted-foreground" />;
   };
 
   if (loading) {
@@ -247,16 +318,98 @@ export function TradingHistory() {
             <CardHeader>
               <CardTitle>AI торговые сигналы</CardTitle>
               <CardDescription>
-                Сигналы от TokenMetrics появятся здесь после запуска робота
+                История сигналов от TokenMetrics AI
               </CardDescription>
             </CardHeader>
             
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Сигналы пока не поступали</p>
-                <p className="text-sm">Запустите торгового робота для получения AI сигналов от TokenMetrics</p>
-              </div>
+              {signalsLoading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+                  ))}
+                </div>
+              ) : signals.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Токен</TableHead>
+                      <TableHead>Сигнал</TableHead>
+                      <TableHead>Тренд</TableHead>
+                      <TableHead>Трейдер</TableHead>
+                      <TableHead>Инвестор</TableHead>
+                      <TableHead>Уверенность</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {signals.map((signal) => (
+                      <TableRow key={signal.id}>
+                        <TableCell className="text-sm">
+                          {signal.signal_date ? 
+                            new Date(signal.signal_date).toLocaleDateString('ru-RU') : 
+                            new Date(signal.created_at).toLocaleDateString('ru-RU')
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{signal.token_symbol || 'N/A'}</div>
+                            <div className="text-xs text-muted-foreground">{signal.token_name || ''}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getSignalBadge(signal.trading_signal).variant}>
+                            {getSignalBadge(signal.trading_signal).text}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            {getTrendIcon(signal.token_trend)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {signal.trader_grade !== null ? (
+                            <Badge variant="outline">
+                              {signal.trader_grade.toFixed(1)}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {signal.investor_grade !== null ? (
+                            <Badge variant="outline">
+                              {signal.investor_grade.toFixed(1)}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {signal.confidence !== null ? (
+                            <div className="flex items-center">
+                              <div className={`text-sm font-medium ${
+                                signal.confidence > 0.7 ? 'text-success' : 
+                                signal.confidence > 0.5 ? 'text-warning' : 'text-muted-foreground'
+                              }`}>
+                                {(signal.confidence * 100).toFixed(0)}%
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>Сигналы пока не поступали</p>
+                  <p className="text-sm">Запустите торгового робота для получения AI сигналов от TokenMetrics</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

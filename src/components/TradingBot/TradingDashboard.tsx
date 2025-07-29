@@ -33,18 +33,56 @@ export function TradingDashboard() {
 
   const loadBotStatus = async () => {
     try {
-      const { data } = await supabase
+      setLoading(true);
+      
+      // Try to get bot settings, handle case when no settings exist
+      const { data: settings, error } = await supabase
         .from('bot_settings')
         .select('is_active, is_demo')
         .eq('user_id', user?.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to handle 0 rows
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading bot status:', error);
+        throw error;
+      }
 
-      if (data) {
-        setIsBotActive(data.is_active);
-        setIsDemo(data.is_demo);
+      // If no settings exist, create default ones
+      if (!settings && user) {
+        console.log('Creating default bot settings for new user');
+        const { error: insertError } = await supabase
+          .from('bot_settings')
+          .insert({
+            user_id: user.id,
+            is_active: false,
+            is_demo: true,
+            max_positions: 3,
+            position_size_percent: 1.00,
+            stop_loss_percent: 2.00,
+            take_profit_percent: 4.00,
+            daily_loss_limit_percent: 5.00,
+            min_signal_strength: 0.70,
+            timeframe: '15m',
+            trading_pairs: ['BTCUSDT', 'ETHUSDT']
+          });
+        
+        if (insertError) {
+          console.error('Error creating default settings:', insertError);
+        } else {
+          setIsBotActive(false);
+          setIsDemo(true);
+        }
+      } else if (settings) {
+        setIsBotActive(settings.is_active);
+        setIsDemo(settings.is_demo);
       }
     } catch (error) {
-      console.error('Error loading bot status:', error);
+      console.error('Failed to load bot status:', error);
+      // Set defaults on error
+      setIsBotActive(false);
+      setIsDemo(true);
+    } finally {
+      setLoading(false);
     }
   };
 

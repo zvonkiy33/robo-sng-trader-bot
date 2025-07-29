@@ -145,36 +145,52 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
 
   console.log(`Getting signals for user ${user_id} with settings:`, JSON.stringify(settings, null, 2))
 
-  // Get signals from TokenMetrics
+  // Get signals from TokenMetrics with better error handling
   const tokenmetricsUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/tokenmetrics-api`
   console.log(`Calling TokenMetrics API at: ${tokenmetricsUrl}`)
   
-  const signalsResponse = await fetch(tokenmetricsUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-    },
-    body: JSON.stringify({
-      user_id,
-      action: 'get_signals',
-      data: {
-        is_demo: settings.is_demo,
-        symbols: settings.trading_pairs.map((pair: string) => pair.replace('USDT', '')),
-        timeframe: settings.timeframe || '15m'
-      }
+  try {
+    const signalsResponse = await fetch(tokenmetricsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+      },
+      body: JSON.stringify({
+        user_id,
+        action: 'get_signals',
+        data: {
+          is_demo: settings.is_demo,
+          symbols: settings.trading_pairs.map((pair: string) => pair.replace('USDT', '')),
+          timeframe: settings.timeframe || '15m'
+        }
+      })
     })
-  })
 
-  console.log(`TokenMetrics API response status: ${signalsResponse.status}`)
-  
-  const signalsResult = await signalsResponse.json()
-  console.log(`TokenMetrics API response:`, JSON.stringify(signalsResult, null, 2))
-  
-  if (!signalsResult.success) {
-    console.error(`TokenMetrics API failed:`, signalsResult.error)
-    throw new Error(signalsResult.error)
-  }
+    console.log(`TokenMetrics API response status: ${signalsResponse.status}`)
+    
+    const signalsResult = await signalsResponse.json()
+    console.log(`TokenMetrics API response:`, JSON.stringify(signalsResult, null, 2))
+    
+    if (!signalsResult.success) {
+      // Handle specific TokenMetrics errors
+      if (signalsResult.error?.includes('rate limit') || signalsResult.error?.includes('429')) {
+        console.warn('⚠️ TokenMetrics API rate limit reached - skipping this cycle');
+        return new Response(JSON.stringify({ 
+          success: true, 
+          data: {
+            signals: [],
+            settings: settings,
+            message: 'TokenMetrics API rate limit reached, skipping this cycle'
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      
+      console.error(`TokenMetrics API failed:`, signalsResult.error)
+      throw new Error(signalsResult.error)
+    }
 
   // Extract and convert TokenMetrics data to trading signals
   const tokenMetricsData = signalsResult.data.data || []

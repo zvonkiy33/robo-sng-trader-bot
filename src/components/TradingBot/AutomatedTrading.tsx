@@ -31,16 +31,29 @@ const AutomatedTrading = ({ isActive, isDemo }: AutomatedTradingProps) => {
       });
 
       if (response.error) {
-        console.error('Ошибка автоматической торговли:', response.error);
+        console.error('❌ Ошибка автоматической торговли:', response.error);
+        toast({
+          title: "Ошибка автоматической торговли",
+          description: `${response.error.message || 'Неизвестная ошибка'}`,
+          variant: "destructive"
+        });
         return;
       }
 
       const result = response.data;
-      if (result && result.executed_trades > 0) {
-        toast({
-          title: "Автоматическая торговля",
-          description: `Выполнено сделок: ${result.executed_trades}`,
-        });
+      console.log('🤖 Результат автоматической торговли:', result);
+      
+      if (result && result.success) {
+        const executedSignals = result.data?.signals?.filter((s: any) => s.status === 'EXECUTED') || [];
+        
+        if (executedSignals.length > 0) {
+          toast({
+            title: "Автоматическая торговля",
+            description: `Выполнено сделок: ${executedSignals.length}`,
+          });
+        } else {
+          console.log('ℹ️ Автоматическая торговля: новых сделок не найдено');
+        }
       }
     } catch (error) {
       console.error('Ошибка в автоматической торговле:', error);
@@ -52,10 +65,14 @@ const AutomatedTrading = ({ isActive, isDemo }: AutomatedTradingProps) => {
       // Запускаем сразу
       executeAutomatedTrading();
       
-      // Затем каждые 2 минуты
-      intervalRef.current = setInterval(executeAutomatedTrading, 2 * 60 * 1000);
+      // Затем каждые 5 минут (увеличено для снижения нагрузки на API)
+      intervalRef.current = setInterval(executeAutomatedTrading, 5 * 60 * 1000);
       
-      console.log(`🚀 Автоматическая торговля запущена (каждые 2 минуты)`);
+      console.log(`🚀 Автоматическая торговля запущена (каждые 5 минут)`);
+      toast({
+        title: "Автоматическая торговля запущена",
+        description: "Бот будет проверять сигналы каждые 5 минут",
+      });
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

@@ -38,23 +38,31 @@ Deno.serve(async (req) => {
 
     const baseUrl = is_demo ? 'https://api-testnet.bybit.com' : 'https://api.bybit.com'
 
-    // Generate signature for Bybit V5 API
-    async function generateSignature(params: Record<string, any>, apiSecret: string) {
+    // Generate signature for Bybit V5 API (fixed)
+    async function generateSignature(params: Record<string, any>, apiSecret: string, method: string = 'GET', body?: string) {
       const timestamp = Date.now().toString()
       const recv_window = '5000'
       
-      params.api_key = credentials.api_key
-      params.timestamp = timestamp
-      params.recv_window = recv_window
+      // Add timestamp and recv_window to params if not present
+      if (!params.timestamp) params.timestamp = timestamp
+      if (!params.recv_window) params.recv_window = recv_window
+      if (!params.api_key) params.api_key = credentials.api_key
 
-      // For Bybit V5, the signature format is: timestamp + api_key + recv_window + queryString
-      const paramString = Object.keys(params)
-        .sort()
-        .map(key => `${key}=${params[key]}`)
-        .join('&')
+      let signString = ''
       
-      const signString = timestamp + credentials.api_key + recv_window + paramString
-      console.log(`Bybit signature string: ${signString}`)
+      if (method === 'GET') {
+        // For GET requests: timestamp + api_key + recv_window + query_string
+        const sortedParams = Object.keys(params)
+          .sort()
+          .map(key => `${key}=${encodeURIComponent(params[key])}`)
+          .join('&')
+        signString = timestamp + credentials.api_key + recv_window + sortedParams
+      } else {
+        // For POST requests: timestamp + api_key + recv_window + body
+        signString = timestamp + credentials.api_key + recv_window + (body || '')
+      }
+      
+      console.log(`Bybit V5 signature string (${method}): ${signString}`)
 
       const encoder = new TextEncoder()
       
@@ -71,8 +79,8 @@ Deno.serve(async (req) => {
         .map(b => b.toString(16).padStart(2, '0'))
         .join('')
       
-      console.log(`Generated signature: ${hexSignature}`)
-      return hexSignature
+      console.log(`Generated V5 signature: ${hexSignature}`)
+      return { signature: hexSignature, timestamp, recv_window }
     }
 
     let result = {}
@@ -85,19 +93,21 @@ Deno.serve(async (req) => {
             coin: data?.coin || 'USDT'
           }
           
-          const signature = await generateSignature(params, credentials.api_secret)
+          const { signature, timestamp, recv_window } = await generateSignature(params, credentials.api_secret, 'GET')
           
-          result = await callBybitWithRetry(`${baseUrl}/v5/account/wallet-balance?${new URLSearchParams({
+          const queryParams = new URLSearchParams({
             ...params,
             api_key: credentials.api_key,
-            timestamp: params.timestamp,
-            recv_window: params.recv_window,
+            timestamp,
+            recv_window,
             sign: signature
-          })}`, {
+          })
+          
+          result = await callBybitWithRetry(`${baseUrl}/v5/account/wallet-balance?${queryParams}`, {
             headers: {
               'X-BAPI-API-KEY': credentials.api_key,
-              'X-BAPI-TIMESTAMP': params.timestamp,
-              'X-BAPI-RECV-WINDOW': params.recv_window,
+              'X-BAPI-TIMESTAMP': timestamp,
+              'X-BAPI-RECV-WINDOW': recv_window,
               'X-BAPI-SIGN': signature,
             }
           })
@@ -115,18 +125,19 @@ Deno.serve(async (req) => {
             ...data.extraParams
           }
 
-          const signature = await generateSignature(orderParams, credentials.api_secret)
+          const requestBody = JSON.stringify(orderParams)
+          const { signature, timestamp, recv_window } = await generateSignature({}, credentials.api_secret, 'POST', requestBody)
 
           result = await callBybitWithRetry(`${baseUrl}/v5/order/create`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-BAPI-API-KEY': credentials.api_key,
-              'X-BAPI-TIMESTAMP': orderParams.timestamp,
-              'X-BAPI-RECV-WINDOW': orderParams.recv_window,
+              'X-BAPI-TIMESTAMP': timestamp,
+              'X-BAPI-RECV-WINDOW': recv_window,
               'X-BAPI-SIGN': signature,
             },
-            body: JSON.stringify(orderParams)
+            body: requestBody
           })
         }
         break
@@ -138,19 +149,21 @@ Deno.serve(async (req) => {
             symbol: data?.symbol || ''
           }
 
-          const signature = await generateSignature(params, credentials.api_secret)
+          const { signature, timestamp, recv_window } = await generateSignature(params, credentials.api_secret, 'GET')
 
-          result = await callBybitWithRetry(`${baseUrl}/v5/position/list?${new URLSearchParams({
+          const queryParams = new URLSearchParams({
             ...params,
             api_key: credentials.api_key,
-            timestamp: params.timestamp,
-            recv_window: params.recv_window,
+            timestamp,
+            recv_window,
             sign: signature
-          })}`, {
+          })
+
+          result = await callBybitWithRetry(`${baseUrl}/v5/position/list?${queryParams}`, {
             headers: {
               'X-BAPI-API-KEY': credentials.api_key,
-              'X-BAPI-TIMESTAMP': params.timestamp,
-              'X-BAPI-RECV-WINDOW': params.recv_window,
+              'X-BAPI-TIMESTAMP': timestamp,
+              'X-BAPI-RECV-WINDOW': recv_window,
               'X-BAPI-SIGN': signature,
             }
           })

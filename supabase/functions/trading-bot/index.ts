@@ -377,6 +377,11 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
+
+  } catch (error) {
+    console.error('TokenMetrics API failed:', error)
+    throw new Error(error.message)
+  }
 }
 
 async function executeTrade(supabase: any, user_id: string, data: any) {

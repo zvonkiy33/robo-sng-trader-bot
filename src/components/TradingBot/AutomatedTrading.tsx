@@ -65,13 +65,13 @@ const AutomatedTrading = ({ isActive, isDemo }: AutomatedTradingProps) => {
       // Запускаем сразу
       executeAutomatedTrading();
       
-      // Затем каждые 5 минут (увеличено для снижения нагрузки на API)
-      intervalRef.current = setInterval(executeAutomatedTrading, 5 * 60 * 1000);
+      // Затем каждые 30 минут (оптимизация для TokenMetrics API)
+      intervalRef.current = setInterval(executeAutomatedTrading, 30 * 60 * 1000);
       
-      console.log(`🚀 Автоматическая торговля запущена (каждые 5 минут)`);
+      console.log(`🚀 Автоматическая торговля запущена (каждые 30 минут)`);
       toast({
         title: "Автоматическая торговля запущена",
-        description: "Бот будет проверять сигналы каждые 5 минут",
+        description: "Бот будет проверять сигналы каждые 30 минут",
       });
     } else {
       if (intervalRef.current) {

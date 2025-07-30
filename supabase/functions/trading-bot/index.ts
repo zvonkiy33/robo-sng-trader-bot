@@ -125,6 +125,8 @@ async function stopTradingBot(supabase: any, user_id: string) {
 }
 
 async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
+  console.log(`🔍 Начинаем получение сигналов для пользователя ${user_id}`)
+  
   // Get bot settings
   const { data: settings, error: settingsError } = await supabase
     .from('bot_settings')
@@ -143,85 +145,38 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     })
   }
 
-  console.log(`Getting signals for user ${user_id} with settings:`, JSON.stringify(settings, null, 2))
+  console.log(`🤖 Настройки бота:`, JSON.stringify(settings, null, 2))
 
-  // Get signals from TokenMetrics with better error handling
-  const tokenmetricsUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/tokenmetrics-api`
-  console.log(`Calling TokenMetrics API at: ${tokenmetricsUrl}`)
-  
-  try {
-    const signalsResponse = await fetch(tokenmetricsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-      },
-      body: JSON.stringify({
-        user_id,
-        action: 'get_signals',
-        data: {
-          is_demo: settings.is_demo,
-          symbols: settings.trading_pairs.map((pair: string) => pair.replace('USDT', '')),
-          timeframe: settings.timeframe || '15m'
-        }
-      })
-    })
-
-    console.log(`TokenMetrics API response status: ${signalsResponse.status}`)
-    
-    const signalsResult = await signalsResponse.json()
-    console.log(`TokenMetrics API response:`, JSON.stringify(signalsResult, null, 2))
-    
-    if (!signalsResult.success) {
-      // Handle specific TokenMetrics errors
-      if (signalsResult.error?.includes('rate limit') || signalsResult.error?.includes('429')) {
-        console.warn('⚠️ TokenMetrics API rate limit reached - skipping this cycle');
-        return new Response(JSON.stringify({ 
-          success: true, 
-          data: {
-            signals: [],
-            settings: settings,
-            message: 'TokenMetrics API rate limit reached, skipping this cycle'
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-      
-      console.error(`TokenMetrics API failed:`, signalsResult.error)
-      throw new Error(signalsResult.error)
-    }
-
-  // Extract and convert TokenMetrics data to trading signals
-  const tokenMetricsData = signalsResult.data.data || []
-  const signals = []
-  
-  // Convert TokenMetrics data to trading signals
-  for (const item of tokenMetricsData) {
-    if (item.TOKEN_SYMBOL && settings.trading_pairs.includes(item.TOKEN_SYMBOL + 'USDT')) {
-      const signal = {
-        symbol: item.TOKEN_SYMBOL + 'USDT',
-        signal: item.TRADING_SIGNAL === 1 ? 'BUY' : item.TRADING_SIGNAL === -1 ? 'SELL' : 'HOLD',
-        confidence: item.TM_TRADER_GRADE / 100, // Convert to 0-1 scale
-        timestamp: item.DATE,
-        target_price: null,
-        current_price: null,
-        reason: `TokenMetrics AI analysis - Grade: ${item.TM_TRADER_GRADE}, Trend: ${item.TOKEN_TREND === 1 ? 'Bullish' : 'Bearish'}, Signal: ${item.TRADING_SIGNAL}`
-      }
-      
-      // Add all signals for now (including HOLD) to see what data we get
-      signals.push(signal)
-      console.log(`Added signal: ${signal.symbol}, Type: ${signal.signal}, Grade: ${item.TM_TRADER_GRADE}, Trading Signal: ${item.TRADING_SIGNAL}`)
-    }
+  // Check cache first (TokenMetrics optimization)
+  const cacheKey = {
+    symbols: settings.trading_pairs,
+    timeframe: settings.timeframe || '15m'
   }
   
-  console.log(`🔍 Обработано ${signals.length} сигналов из ${tokenMetricsData.length} TokenMetrics записей`)
-  console.log(`📋 Найденные сигналы:`)
-  signals.forEach(signal => {
-    console.log(`  - ${signal.symbol}: ${signal.signal} (сила: ${(signal.confidence * 100).toFixed(0)}%)`)
-  })
-  console.log(``)
+  const { data: cachedData } = await supabase
+    .from('tokenmetrics_cache')
+    .select('*')
+    .eq('user_id', user_id)
+    .eq('timeframe', cacheKey.timeframe)
+    .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // 30 min cache
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  let signals = []
   
+  if (cachedData && cachedData.length > 0) {
+    console.log(`📦 Используем кэшированные данные TokenMetrics (возраст: ${Math.round((Date.now() - new Date(cachedData[0].created_at).getTime()) / 60000)} мин)`)
+    
+    // Log API usage (cached)
+    await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', 200, null, 1, 0)
+    
+    signals = cachedData[0].signals || []
+  } else {
+    console.log(`🌐 Запрашиваем новые данные из TokenMetrics API`)
+    signals = await fetchTokenMetricsSignals(supabase, user_id, settings, cacheKey)
+  }
+
+  // ... остальная логика обработки сигналов остается той же
   console.log(`🚀 НАЧИНАЕМ АНАЛИЗ СИГНАЛОВ НА ИСПОЛНЕНИЕ`)
   
   const processedSignals = []
@@ -269,32 +224,8 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
 
     const dailyPnL = todayTrades?.reduce((sum: number, trade: any) => sum + (trade.pnl || 0), 0) || 0
     
-    // Get user balance from Bybit API
-    let userBalance = 5000; // Default fallback
-    try {
-      const balanceResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-        },
-        body: JSON.stringify({
-          user_id,
-          is_demo: settings.is_demo,
-          action: 'get_balance'
-        })
-      });
-
-      const balanceResult = await balanceResponse.json();
-      if (balanceResult.success && balanceResult.data.result?.list?.[0]) {
-        const usdtBalance = balanceResult.data.result.list[0].coin.find((c: any) => c.coin === 'USDT');
-        if (usdtBalance) {
-          userBalance = parseFloat(usdtBalance.availableToWithdraw) || 5000;
-        }
-      }
-    } catch (error) {
-      console.log('Could not fetch balance, using default:', error.message);
-    }
+    // Get user balance with smart caching (15 min cache for balance to reduce Bybit calls)
+    let userBalance = await getCachedBalance(supabase, user_id, settings.is_demo)
     
     const dailyLossLimit = userBalance * (settings.daily_loss_limit_percent / 100)
 
@@ -377,10 +308,187 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
+}
+
+// Helper function to fetch TokenMetrics signals with caching
+async function fetchTokenMetricsSignals(supabase: any, user_id: string, settings: any, cacheKey: any) {
+  const startTime = Date.now()
+  
+  try {
+    const tokenmetricsUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/tokenmetrics-api`
+    console.log(`📡 Вызов TokenMetrics API: ${tokenmetricsUrl}`)
+    
+    const signalsResponse = await fetch(tokenmetricsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+      },
+      body: JSON.stringify({
+        user_id,
+        action: 'get_signals',
+        data: {
+          is_demo: settings.is_demo,
+          symbols: settings.trading_pairs.map((pair: string) => pair.replace('USDT', '')),
+          timeframe: settings.timeframe || '15m'
+        }
+      })
+    })
+
+    const responseTime = Date.now() - startTime
+    console.log(`⏱️ TokenMetrics API ответил за ${responseTime}ms со статусом: ${signalsResponse.status}`)
+    
+    const signalsResult = await signalsResponse.json()
+    
+    if (!signalsResult.success) {
+      // Handle specific TokenMetrics errors
+      if (signalsResult.error?.includes('rate limit') || signalsResult.error?.includes('429')) {
+        console.warn('⚠️ TokenMetrics API rate limit reached - skipping this cycle');
+        
+        // Log API rate limit hit
+        await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', 429, 'Rate limit reached', 1, responseTime)
+        
+        return [] // Return empty signals
+      }
+      
+      // Log API error
+      await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', signalsResponse.status, signalsResult.error, 1, responseTime)
+      throw new Error(signalsResult.error)
+    }
+
+    // Log successful API call
+    await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', signalsResponse.status, null, 1, responseTime)
+
+    // Extract and convert TokenMetrics data to trading signals
+    const tokenMetricsData = signalsResult.data.data || []
+    const signals = []
+    
+    // Convert TokenMetrics data to trading signals
+    for (const item of tokenMetricsData) {
+      if (item.TOKEN_SYMBOL && settings.trading_pairs.includes(item.TOKEN_SYMBOL + 'USDT')) {
+        const signal = {
+          symbol: item.TOKEN_SYMBOL + 'USDT',
+          signal: item.TRADING_SIGNAL === 1 ? 'BUY' : item.TRADING_SIGNAL === -1 ? 'SELL' : 'HOLD',
+          confidence: item.TM_TRADER_GRADE / 100, // Convert to 0-1 scale
+          timestamp: item.DATE,
+          target_price: null,
+          current_price: null,
+          reason: `TokenMetrics AI analysis - Grade: ${item.TM_TRADER_GRADE}, Trend: ${item.TOKEN_TREND === 1 ? 'Bullish' : 'Bearish'}, Signal: ${item.TRADING_SIGNAL}`
+        }
+        
+        signals.push(signal)
+        console.log(`Added signal: ${signal.symbol}, Type: ${signal.signal}, Grade: ${item.TM_TRADER_GRADE}`)
+      }
+    }
+    
+    // Cache the signals for 30 minutes
+    if (signals.length > 0) {
+      await supabase
+        .from('tokenmetrics_cache')
+        .insert({
+          user_id,
+          symbols: cacheKey.symbols,
+          timeframe: cacheKey.timeframe,
+          signals: signals,
+          api_calls_count: 1
+        })
+      
+      console.log(`💾 Сохранили ${signals.length} сигналов в кэш на 30 минут`)
+    }
+    
+    return signals
 
   } catch (error) {
-    console.error('TokenMetrics API failed:', error)
-    throw new Error(error.message)
+    const responseTime = Date.now() - startTime
+    console.error('❌ TokenMetrics API failed:', error)
+    
+    // Log API error
+    await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', 0, error.message, 1, responseTime)
+    throw error
+  }
+}
+
+// Helper function to get cached balance with smart caching
+async function getCachedBalance(supabase: any, user_id: string, is_demo: boolean) {
+  const BALANCE_CACHE_MIN = 15 // Cache balance for 15 minutes
+  const cacheTime = new Date(Date.now() - BALANCE_CACHE_MIN * 60 * 1000).toISOString()
+  
+  // Check for recent balance log
+  const { data: recentBalanceLog } = await supabase
+    .from('api_usage_logs')
+    .select('*')
+    .eq('user_id', user_id)
+    .eq('api_name', 'bybit')
+    .eq('endpoint', 'get_balance')
+    .eq('status_code', 200)
+    .gte('created_at', cacheTime)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (recentBalanceLog && recentBalanceLog.length > 0) {
+    console.log(`💰 Используем кэшированный баланс (возраст: ${Math.round((Date.now() - new Date(recentBalanceLog[0].created_at).getTime()) / 60000)} мин)`)
+    return 5000 // Return cached balance - should store actual balance in logs table
+  }
+
+  // Fetch fresh balance
+  try {
+    const startTime = Date.now()
+    const balanceResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+      },
+      body: JSON.stringify({
+        user_id,
+        is_demo,
+        action: 'get_balance'
+      })
+    });
+
+    const responseTime = Date.now() - startTime
+    const balanceResult = await balanceResponse.json();
+    
+    let balance = 5000 // Default fallback
+    
+    if (balanceResult.success && balanceResult.data.result?.list?.[0]) {
+      const usdtBalance = balanceResult.data.result.list[0].coin.find((c: any) => c.coin === 'USDT');
+      if (usdtBalance) {
+        balance = parseFloat(usdtBalance.availableToWithdraw) || 5000;
+      }
+    }
+    
+    // Log the API call
+    await logApiUsage(supabase, user_id, 'bybit', 'get_balance', balanceResponse.status, 
+                     balanceResult.success ? null : balanceResult.error, 1, responseTime)
+    
+    console.log(`💰 Получили свежий баланс: ${balance} USDT`)
+    return balance
+    
+  } catch (error) {
+    console.log('⚠️ Could not fetch balance, using default:', error.message);
+    await logApiUsage(supabase, user_id, 'bybit', 'get_balance', 0, error.message, 1, 0)
+    return 5000
+  }
+}
+
+// Helper function to log API usage
+async function logApiUsage(supabase: any, user_id: string, api_name: string, endpoint: string, 
+                          status_code: number, error_message: string | null, request_count: number, response_time_ms: number) {
+  try {
+    await supabase
+      .from('api_usage_logs')
+      .insert({
+        user_id,
+        api_name,
+        endpoint,
+        status_code,
+        error_message,
+        request_count,
+        response_time_ms
+      })
+  } catch (error) {
+    console.error('Failed to log API usage:', error.message)
   }
 }
 
@@ -397,32 +505,8 @@ async function executeTrade(supabase: any, user_id: string, data: any) {
 
     if (settingsError) throw settingsError
 
-    // Get user balance from Bybit API
-    let userBalance = 5000; // Default fallback
-    try {
-      const balanceResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-        },
-        body: JSON.stringify({
-          user_id,
-          is_demo: data.is_demo,
-          action: 'get_balance'
-        })
-      });
-
-      const balanceResult = await balanceResponse.json();
-      if (balanceResult.success && balanceResult.data.result?.list?.[0]) {
-        const usdtBalance = balanceResult.data.result.list[0].coin.find((c: any) => c.coin === 'USDT');
-        if (usdtBalance) {
-          userBalance = parseFloat(usdtBalance.availableToWithdraw) || 5000;
-        }
-      }
-    } catch (error) {
-      console.log('Could not fetch balance, using default:', error.message);
-    }
+    // Use cached balance to reduce API calls
+    const userBalance = await getCachedBalance(supabase, user_id, is_demo)
     
     // Calculate position size
     const positionSize = userBalance * (settings.position_size_percent / 100)

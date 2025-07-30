@@ -53,6 +53,42 @@ export type Database = {
         }
         Relationships: []
       }
+      api_usage_logs: {
+        Row: {
+          api_name: string
+          created_at: string
+          endpoint: string
+          error_message: string | null
+          id: string
+          request_count: number | null
+          response_time_ms: number | null
+          status_code: number | null
+          user_id: string
+        }
+        Insert: {
+          api_name: string
+          created_at?: string
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          request_count?: number | null
+          response_time_ms?: number | null
+          status_code?: number | null
+          user_id: string
+        }
+        Update: {
+          api_name?: string
+          created_at?: string
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          request_count?: number | null
+          response_time_ms?: number | null
+          status_code?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       bot_settings: {
         Row: {
           created_at: string
@@ -143,6 +179,39 @@ export type Database = {
           unrealized_pnl?: number
           user_id?: string
           win_rate?: number | null
+        }
+        Relationships: []
+      }
+      tokenmetrics_cache: {
+        Row: {
+          api_calls_count: number | null
+          created_at: string
+          id: string
+          signals: Json
+          symbols: string[]
+          timeframe: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_calls_count?: number | null
+          created_at?: string
+          id?: string
+          signals: Json
+          symbols: string[]
+          timeframe?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_calls_count?: number | null
+          created_at?: string
+          id?: string
+          signals?: Json
+          symbols?: string[]
+          timeframe?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -334,6 +403,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      clean_old_api_logs: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      clean_old_tokenmetrics_cache: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       decrypt_api_credential: {
         Args: { encrypted_credential: string }
         Returns: string

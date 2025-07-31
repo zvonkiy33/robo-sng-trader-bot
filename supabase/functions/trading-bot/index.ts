@@ -147,7 +147,32 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
 
   console.log(`🤖 Настройки бота:`, JSON.stringify(settings, null, 2))
 
-  // Check cache first (TokenMetrics optimization)
+  // Check monthly TokenMetrics limit first
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+  
+  const { data: monthlyUsage } = await supabase
+    .from('api_usage_logs')
+    .select('request_count')
+    .eq('user_id', user_id)
+    .eq('api_name', 'tokenmetrics')
+    .gte('created_at', monthStart.toISOString())
+  
+  const totalMonthlyRequests = monthlyUsage?.reduce((sum, log) => sum + (log.request_count || 1), 0) || 0
+  console.log(`📊 Месячное использование TokenMetrics: ${totalMonthlyRequests}/5000`)
+  
+  if (totalMonthlyRequests >= 4000) { // Stop at 80% to be safe
+    console.log(`🛑 Превышение лимита TokenMetrics (${totalMonthlyRequests}/5000) - пропускаем цикл`)
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: 'TokenMetrics monthly limit reached (80%). Bot stopped to preserve limits.' 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Check cache first (TokenMetrics optimization) - increase cache time to 2 hours
   const cacheKey = {
     symbols: settings.trading_pairs,
     timeframe: settings.timeframe || '15m'
@@ -158,7 +183,7 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     .select('*')
     .eq('user_id', user_id)
     .eq('timeframe', cacheKey.timeframe)
-    .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // 30 min cache
+    .gte('created_at', new Date(Date.now() - 120 * 60 * 1000).toISOString()) // 2 hour cache instead of 30 min
     .order('created_at', { ascending: false })
     .limit(1)
 
@@ -167,9 +192,7 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
   if (cachedData && cachedData.length > 0) {
     console.log(`📦 Используем кэшированные данные TokenMetrics (возраст: ${Math.round((Date.now() - new Date(cachedData[0].created_at).getTime()) / 60000)} мин)`)
     
-    // Log API usage (cached)
-    await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', 200, null, 1, 0)
-    
+    // Don't log cached requests to avoid inflating stats
     signals = cachedData[0].signals || []
   } else {
     console.log(`🌐 Запрашиваем новые данные из TokenMetrics API`)
@@ -358,6 +381,19 @@ async function fetchTokenMetricsSignals(supabase: any, user_id: string, settings
 
     // Log successful API call
     await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', signalsResponse.status, null, 1, responseTime)
+
+    // Cache the results for 2 hours to reduce API calls
+    await supabase
+      .from('tokenmetrics_cache')
+      .upsert({
+        user_id,
+        timeframe: settings.timeframe || '15m',
+        symbols: settings.trading_pairs,
+        signals: signals,
+        created_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,timeframe'
+      })
 
     // Extract and convert TokenMetrics data to trading signals
     const tokenMetricsData = signalsResult.data.data || []

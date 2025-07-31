@@ -1,5 +1,34 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.1'
 
+// Helper function to log API usage
+async function logApiUsage(
+  supabase: any, 
+  user_id: string, 
+  api_name: string, 
+  endpoint: string, 
+  status_code: number, 
+  error_message: string | null, 
+  request_count: number = 1, 
+  response_time_ms: number
+) {
+  try {
+    await supabase
+      .from('api_usage_logs')
+      .insert({
+        user_id,
+        api_name,
+        endpoint,
+        status_code,
+        error_message,
+        request_count,
+        response_time_ms,
+        created_at: new Date().toISOString()
+      });
+  } catch (error) {
+    console.error('Failed to log API usage:', error);
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -18,6 +47,7 @@ Deno.serve(async (req) => {
     )
 
     const { user_id, is_demo, action, data } = await req.json()
+    const startTime = Date.now();
 
     console.log(`Bybit API request: ${action} for user ${user_id}`)
 
@@ -31,6 +61,7 @@ Deno.serve(async (req) => {
 
     if (credError || !credentialsResult || credentialsResult.length === 0) {
       console.error('Credentials error:', credError)
+      await logApiUsage(supabase, user_id, 'bybit', action || 'unknown', 401, 'API credentials not found', 1, Date.now() - startTime);
       throw new Error('Bybit API credentials not found')
     }
 
@@ -103,7 +134,7 @@ Deno.serve(async (req) => {
             sign: signature
           })
           
-          const startTime = Date.now()
+          const requestStart = Date.now()
           result = await callBybitWithRetry(`${baseUrl}/v5/account/wallet-balance?${queryParams}`, {
             headers: {
               'X-BAPI-API-KEY': credentials.api_key,
@@ -112,20 +143,10 @@ Deno.serve(async (req) => {
               'X-BAPI-SIGN': signature,
             }
           })
-          const responseTime = Date.now() - startTime
+          const responseTime = Date.now() - requestStart
           
           // Log API usage for get_balance
-          await supabase
-            .from('api_usage_logs')
-            .insert({
-              user_id,
-              api_name: 'Bybit',
-              endpoint: 'get_balance',
-              status_code: 200,
-              request_count: 1,
-              response_time_ms: responseTime
-            })
-            .catch(logError => console.error('Failed to log API usage:', logError))
+          await logApiUsage(supabase, user_id, 'bybit', 'get_balance', 200, null, 1, responseTime)
         }
         break
 
@@ -143,6 +164,7 @@ Deno.serve(async (req) => {
           const requestBody = JSON.stringify(orderParams)
           const { signature, timestamp, recv_window } = await generateSignature({}, credentials.api_secret, 'POST', requestBody)
 
+          const requestStart = Date.now()
           result = await callBybitWithRetry(`${baseUrl}/v5/order/create`, {
             method: 'POST',
             headers: {
@@ -154,6 +176,10 @@ Deno.serve(async (req) => {
             },
             body: requestBody
           })
+          const responseTime = Date.now() - requestStart
+          
+          // Log API usage for place_order
+          await logApiUsage(supabase, user_id, 'bybit', 'place_order', 200, null, 1, responseTime)
         }
         break
 
@@ -174,6 +200,7 @@ Deno.serve(async (req) => {
             sign: signature
           })
 
+          const requestStart = Date.now()
           result = await callBybitWithRetry(`${baseUrl}/v5/position/list?${queryParams}`, {
             headers: {
               'X-BAPI-API-KEY': credentials.api_key,
@@ -182,6 +209,10 @@ Deno.serve(async (req) => {
               'X-BAPI-SIGN': signature,
             }
           })
+          const responseTime = Date.now() - requestStart
+          
+          // Log API usage for get_positions
+          await logApiUsage(supabase, user_id, 'bybit', 'get_positions', 200, null, 1, responseTime)
         }
         break
 
@@ -211,26 +242,16 @@ Deno.serve(async (req) => {
           
           console.log(`Fetching kline data from: ${url}`)
 
-          const startTime = Date.now()
+          const requestStart = Date.now()
           result = await callBybitWithRetry(url, {
             headers: {
               'Content-Type': 'application/json'
             }
           })
-          const responseTime = Date.now() - startTime
+          const responseTime = Date.now() - requestStart
           
           // Log API usage for get_kline_data
-          await supabase
-            .from('api_usage_logs')
-            .insert({
-              user_id,
-              api_name: 'Bybit',
-              endpoint: 'get_kline_data',
-              status_code: 200,
-              request_count: 1,
-              response_time_ms: responseTime
-            })
-            .catch(logError => console.error('Failed to log API usage:', logError))
+          await logApiUsage(supabase, user_id, 'bybit', 'get_kline_data', 200, null, 1, responseTime)
         }
         break
 
@@ -247,6 +268,13 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Bybit API error:', error)
+    
+    // Log API usage for errors
+    const { user_id, action } = await req.json().catch(() => ({ user_id: null, action: 'unknown' }));
+    if (user_id) {
+      await logApiUsage(supabase, user_id, 'bybit', action || 'unknown', 500, error.message, 1, Date.now() - startTime);
+    }
+    
     return new Response(JSON.stringify({ 
       success: false, 
       error: error.message 

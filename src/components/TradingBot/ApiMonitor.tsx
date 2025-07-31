@@ -56,17 +56,30 @@ export function ApiMonitor() {
     try {
       setLoading(true);
 
-      // Get API usage logs from the last 24 hours
+      // Get API usage logs - for TokenMetrics we need monthly data, for Bybit last 24 hours
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
       const { data: logs, error } = await supabase
         .from('api_usage_logs')
         .select('*')
         .eq('user_id', user.id)
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .gte('created_at', yesterday.toISOString())
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      // Get TokenMetrics monthly usage
+      const { data: monthlyLogs, error: monthlyError } = await supabase
+        .from('api_usage_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('api_name', 'tokenmetrics')
+        .gte('created_at', monthStart.toISOString())
+        .order('created_at', { ascending: false });
 
-      // Process logs to get usage statistics
+      if (error || monthlyError) throw error || monthlyError;
+
+      // Process logs to get usage statistics (24h for display)
       const usage: Record<string, any> = {};
       
       logs?.forEach(log => {
@@ -89,6 +102,12 @@ export function ApiMonitor() {
         }
       });
 
+      // Calculate monthly TokenMetrics usage
+      let monthlyTokenmetricsUsage = 0;
+      monthlyLogs?.forEach(log => {
+        monthlyTokenmetricsUsage += log.request_count || 1;
+      });
+
       // Calculate averages and format data
       const formattedUsage = Object.values(usage).map((api: any) => ({
         api_name: api.api_name,
@@ -103,19 +122,28 @@ export function ApiMonitor() {
       setApiUsage(formattedUsage);
 
       // Update limits based on actual usage
-      const tokenmetricsUsage = formattedUsage.find(api => api.api_name === 'TokenMetrics');
-      const bybitUsage = formattedUsage.find(api => api.api_name === 'Bybit');
+      const bybitUsage = formattedUsage.find(api => api.api_name === 'bybit');
 
       setApiLimits(prev => ({
         tokenmetrics: {
           ...prev.tokenmetrics,
-          used: tokenmetricsUsage?.total_requests || 0
+          used: monthlyTokenmetricsUsage // Use monthly data for TokenMetrics
         },
         bybit: {
           ...prev.bybit,
           used: bybitUsage?.total_requests || 0
         }
       }));
+
+      // Check if TokenMetrics is near limit and show warning
+      const tokenmetricsPercentage = (monthlyTokenmetricsUsage / 5000) * 100;
+      if (tokenmetricsPercentage >= 80) {
+        toast({
+          title: "⚠️ Критическое превышение лимитов!",
+          description: `TokenMetrics API: ${tokenmetricsPercentage.toFixed(1)}% от месячного лимита. Рассмотрите остановку бота до начала нового месяца.`,
+          variant: "destructive",
+        });
+      }
 
     } catch (error) {
       console.error('Error loading API usage:', error);
@@ -194,8 +222,13 @@ export function ApiMonitor() {
                 className="h-2"
               />
               <div className="text-xs text-muted-foreground">
-                Остается: {apiLimits.tokenmetrics.total - apiLimits.tokenmetrics.used} запросов
+                Остается: {apiLimits.tokenmetrics.total - apiLimits.tokenmetrics.used} запросов (до 1 числа)
               </div>
+              {(apiLimits.tokenmetrics.used / apiLimits.tokenmetrics.total) >= 0.9 && (
+                <div className="text-xs text-red-600 font-medium">
+                  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ - рекомендуется остановить бота
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

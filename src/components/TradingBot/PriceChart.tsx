@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, Calendar, BarChart3 } from "lucide-react";
+import { TrendingUp, Calendar, BarChart3, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -27,6 +27,8 @@ export function PriceChart() {
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [interval, setInterval] = useState("1h");
   const [period, setPeriod] = useState("7d");
+  const [lastRequest, setLastRequest] = useState<number>(0);
+  const [cacheWarning, setCacheWarning] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -37,7 +39,22 @@ export function PriceChart() {
   const loadChartData = async () => {
     if (!user) return;
 
+    // Check cache timeout (5 minutes)
+    const now = Date.now();
+    const cacheTimeout = 5 * 60 * 1000; // 5 minutes
+    
+    if (lastRequest && (now - lastRequest) < cacheTimeout) {
+      setCacheWarning(true);
+      toast({
+        title: "Кэширование активно",
+        description: "Данные обновляются не чаще раза в 5 минут для экономии API лимитов",
+        variant: "default",
+      });
+      return;
+    }
+
     setLoading(true);
+    setCacheWarning(false);
     try {
       // Calculate time range based on period
       const now = Date.now();
@@ -111,6 +128,7 @@ export function PriceChart() {
           .slice(0, 200); // Limit to 200 points for performance
 
         setChartData(processedData);
+        setLastRequest(now);
         
         toast({
           title: "Данные загружены",
@@ -176,6 +194,17 @@ export function PriceChart() {
       </CardHeader>
       
       <CardContent className="space-y-4">
+        {/* Cache Warning */}
+        {cacheWarning && (
+          <div className="flex items-center space-x-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-orange-600" />
+            <div className="text-sm text-orange-800">
+              <strong>Кэширование:</strong> Данные обновляются максимум раз в 5 минут для экономии API лимитов Bybit.
+              Следующее обновление возможно через {Math.ceil((5 * 60 * 1000 - (Date.now() - lastRequest)) / 60000)} мин.
+            </div>
+          </div>
+        )}
+        
         {/* Controls */}
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center space-x-2">

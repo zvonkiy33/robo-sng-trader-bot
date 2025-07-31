@@ -103,6 +103,7 @@ Deno.serve(async (req) => {
             sign: signature
           })
           
+          const startTime = Date.now()
           result = await callBybitWithRetry(`${baseUrl}/v5/account/wallet-balance?${queryParams}`, {
             headers: {
               'X-BAPI-API-KEY': credentials.api_key,
@@ -111,6 +112,20 @@ Deno.serve(async (req) => {
               'X-BAPI-SIGN': signature,
             }
           })
+          const responseTime = Date.now() - startTime
+          
+          // Log API usage for get_balance
+          await supabase
+            .from('api_usage_logs')
+            .insert({
+              user_id,
+              api_name: 'Bybit',
+              endpoint: 'get_balance',
+              status_code: 200,
+              request_count: 1,
+              response_time_ms: responseTime
+            })
+            .catch(logError => console.error('Failed to log API usage:', logError))
         }
         break
 
@@ -196,11 +211,26 @@ Deno.serve(async (req) => {
           
           console.log(`Fetching kline data from: ${url}`)
 
+          const startTime = Date.now()
           result = await callBybitWithRetry(url, {
             headers: {
               'Content-Type': 'application/json'
             }
           })
+          const responseTime = Date.now() - startTime
+          
+          // Log API usage for get_kline_data
+          await supabase
+            .from('api_usage_logs')
+            .insert({
+              user_id,
+              api_name: 'Bybit',
+              endpoint: 'get_kline_data',
+              status_code: 200,
+              request_count: 1,
+              response_time_ms: responseTime
+            })
+            .catch(logError => console.error('Failed to log API usage:', logError))
         }
         break
 

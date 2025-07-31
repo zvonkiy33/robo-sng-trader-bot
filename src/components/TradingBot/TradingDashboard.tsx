@@ -14,6 +14,7 @@ import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
 import { PriceChart } from "./PriceChart";
 import { BotLogs } from "./BotLogs";
+import { ApiMonitor } from "./ApiMonitor";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -247,7 +248,7 @@ export function TradingDashboard() {
 
         {/* Main Content */}
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="dashboard" className="flex items-center space-x-2">
               <TrendingUp className="w-4 h-4" />
               <span>Дашборд</span>
@@ -271,6 +272,10 @@ export function TradingDashboard() {
             <TabsTrigger value="history" className="flex items-center space-x-2">
               <Activity className="w-4 h-4" />
               <span>История</span>
+            </TabsTrigger>
+            <TabsTrigger value="api" className="flex items-center space-x-2">
+              <Activity className="w-4 h-4" />
+              <span>API</span>
             </TabsTrigger>
           </TabsList>
 
@@ -303,6 +308,10 @@ export function TradingDashboard() {
 
           <TabsContent value="history">
             <TradingHistory />
+          </TabsContent>
+
+          <TabsContent value="api">
+            <ApiMonitor />
           </TabsContent>
         </Tabs>
       </div>

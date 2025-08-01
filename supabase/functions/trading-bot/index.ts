@@ -162,11 +162,18 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
   const totalMonthlyRequests = monthlyUsage?.reduce((sum, log) => sum + (log.request_count || 1), 0) || 0
   console.log(`📊 Месячное использование TokenMetrics: ${totalMonthlyRequests}/5000`)
   
-  if (totalMonthlyRequests >= 4000) { // Stop at 80% to be safe
-    console.log(`🛑 Превышение лимита TokenMetrics (${totalMonthlyRequests}/5000) - пропускаем цикл`)
+  if (totalMonthlyRequests >= 3500) { // Stop at 70% to be EXTRA safe due to bugs
+    console.log(`🛑 КРИТИЧЕСКИЙ ЛИМИТ TokenMetrics (${totalMonthlyRequests}/5000) - ОСТАНАВЛИВАЕМ РОБОТА`)
+    
+    // Automatically disable the bot to prevent further API calls
+    await supabase
+      .from('bot_settings')
+      .update({ is_active: false })
+      .eq('user_id', user_id)
+    
     return new Response(JSON.stringify({ 
       success: false, 
-      error: 'TokenMetrics monthly limit reached (80%). Bot stopped to preserve limits.' 
+      error: `КРИТИЧЕСКИЙ ЛИМИТ: Использовано ${totalMonthlyRequests}/5000 запросов TokenMetrics (70%). Робот автоматически отключен.` 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
@@ -382,20 +389,7 @@ async function fetchTokenMetricsSignals(supabase: any, user_id: string, settings
     // Log successful API call
     await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', signalsResponse.status, null, 1, responseTime)
 
-    // Cache the results for 2 hours to reduce API calls
-    await supabase
-      .from('tokenmetrics_cache')
-      .upsert({
-        user_id,
-        timeframe: settings.timeframe || '15m',
-        symbols: settings.trading_pairs,
-        signals: signals,
-        created_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id,timeframe'
-      })
-
-    // Extract and convert TokenMetrics data to trading signals
+    // Extract and convert TokenMetrics data to trading signals FIRST
     const tokenMetricsData = signalsResult.data.data || []
     const signals = []
     
@@ -416,21 +410,24 @@ async function fetchTokenMetricsSignals(supabase: any, user_id: string, settings
         console.log(`Added signal: ${signal.symbol}, Type: ${signal.signal}, Grade: ${item.TM_TRADER_GRADE}`)
       }
     }
-    
-    // Cache the signals for 30 minutes
+
+    // Cache the signals if we have any
     if (signals.length > 0) {
       await supabase
         .from('tokenmetrics_cache')
-        .insert({
+        .upsert({
           user_id,
-          symbols: cacheKey.symbols,
-          timeframe: cacheKey.timeframe,
+          timeframe: settings.timeframe || '15m',
+          symbols: settings.trading_pairs,
           signals: signals,
-          api_calls_count: 1
+          created_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,timeframe'
         })
       
-      console.log(`💾 Сохранили ${signals.length} сигналов в кэш на 30 минут`)
+      console.log(`💾 Сохранили ${signals.length} сигналов в кэш на 2 часа`)
     }
+
     
     return signals
 

@@ -147,7 +147,11 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
 
   console.log(`🤖 Настройки бота:`, JSON.stringify(settings, null, 2))
 
-  // Check monthly TokenMetrics limit first
+  // Определяем источник сигналов из настроек или AUTO по умолчанию
+  const signalSource = settings.signal_source || data.signal_source || 'AUTO'
+  console.log(`🎯 Источник сигналов: ${signalSource}`)
+  
+  // Check monthly TokenMetrics limit 
   const monthStart = new Date()
   monthStart.setDate(1)
   monthStart.setHours(0, 0, 0, 0)
@@ -162,8 +166,16 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
   const totalMonthlyRequests = monthlyUsage?.reduce((sum, log) => sum + (log.request_count || 1), 0) || 0
   console.log(`📊 Месячное использование TokenMetrics: ${totalMonthlyRequests}/5000`)
   
-  if (totalMonthlyRequests >= 3500) { // Stop at 70% to be EXTRA safe due to bugs
-    console.log(`🛑 КРИТИЧЕСКИЙ ЛИМИТ TokenMetrics (${totalMonthlyRequests}/5000) - ОСТАНАВЛИВАЕМ РОБОТА`)
+  // Determine signal source based on limits and preferences
+  let finalSignalSource = signalSource
+  
+  if (totalMonthlyRequests >= 3500 && (signalSource === 'TOKENMETRICS' || signalSource === 'AUTO')) {
+    console.log(`⚠️ TokenMetrics лимит достигнут (${totalMonthlyRequests}/5000) - переключаемся на AI Analyzer`)
+    finalSignalSource = 'AI_ANALYZER'
+  }
+  
+  if (signalSource === 'TOKENMETRICS' && totalMonthlyRequests >= 3500) {
+    console.log(`🛑 КРИТИЧЕСКИЙ ЛИМИТ TokenMetrics (${totalMonthlyRequests}/5000) - но пользователь требует только TokenMetrics`)
     
     // Automatically disable the bot to prevent further API calls
     await supabase
@@ -178,6 +190,8 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
+  
+  console.log(`🎯 Финальный источник сигналов: ${finalSignalSource}`)
 
   // Check cache first (TokenMetrics optimization) - increase cache time to 2 hours
   const cacheKey = {
@@ -196,14 +210,38 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
 
   let signals = []
   
-  if (cachedData && cachedData.length > 0) {
-    console.log(`📦 Используем кэшированные данные TokenMetrics (возраст: ${Math.round((Date.now() - new Date(cachedData[0].created_at).getTime()) / 60000)} мин)`)
-    
-    // Don't log cached requests to avoid inflating stats
-    signals = cachedData[0].signals || []
-  } else {
-    console.log(`🌐 Запрашиваем новые данные из TokenMetrics API`)
-    signals = await fetchTokenMetricsSignals(supabase, user_id, settings, cacheKey)
+  // Get signals based on source
+  if (finalSignalSource === 'AI_ANALYZER') {
+    console.log(`🤖 Используем AI Market Analyzer`)
+    signals = await fetchAIAnalyzerSignals(supabase, user_id, settings)
+  } else if (finalSignalSource === 'TOKENMETRICS') {
+    console.log(`📊 Используем TokenMetrics`)
+    // Check cache first for TokenMetrics
+    if (cachedData && cachedData.length > 0) {
+      console.log(`📦 Используем кэшированные данные TokenMetrics (возраст: ${Math.round((Date.now() - new Date(cachedData[0].created_at).getTime()) / 60000)} мин)`)
+      signals = cachedData[0].signals || []
+    } else {
+      console.log(`🌐 Запрашиваем новые данные из TokenMetrics API`)
+      signals = await fetchTokenMetricsSignals(supabase, user_id, settings, cacheKey)
+    }
+  } else { // AUTO mode
+    console.log(`🎯 AUTO режим - пробуем TokenMetrics, затем AI`)
+    // Try TokenMetrics first if available
+    if (cachedData && cachedData.length > 0) {
+      console.log(`📦 Используем кэшированные данные TokenMetrics (возраст: ${Math.round((Date.now() - new Date(cachedData[0].created_at).getTime()) / 60000)} мин)`)
+      signals = cachedData[0].signals || []
+    } else if (totalMonthlyRequests < 3500) {
+      try {
+        console.log(`🌐 Запрашиваем новые данные из TokenMetrics API`)
+        signals = await fetchTokenMetricsSignals(supabase, user_id, settings, cacheKey)
+      } catch (error) {
+        console.log(`⚠️ TokenMetrics недоступен, переключаемся на AI Analyzer:`, error.message)
+        signals = await fetchAIAnalyzerSignals(supabase, user_id, settings)
+      }
+    } else {
+      console.log(`🤖 Лимиты TokenMetrics исчерпаны, используем AI Analyzer`)
+      signals = await fetchAIAnalyzerSignals(supabase, user_id, settings)
+    }
   }
 
   // ... остальная логика обработки сигналов остается той же
@@ -437,6 +475,69 @@ async function fetchTokenMetricsSignals(supabase: any, user_id: string, settings
     
     // Log API error
     await logApiUsage(supabase, user_id, 'tokenmetrics', 'get_signals', 0, error.message, 1, responseTime)
+    throw error
+  }
+}
+
+// Helper function to fetch AI Analyzer signals
+async function fetchAIAnalyzerSignals(supabase: any, user_id: string, settings: any) {
+  const startTime = Date.now()
+  
+  try {
+    console.log(`🤖 Вызов AI Market Analyzer`)
+    
+    const aiResponse = await supabase.functions.invoke('ai-market-analyzer', {
+      body: {
+        user_id,
+        symbols: settings.trading_pairs,
+        timeframe: settings.timeframe || '15m'
+      }
+    })
+
+    const responseTime = Date.now() - startTime
+    console.log(`⏱️ AI Analyzer ответил за ${responseTime}ms`)
+    
+    if (aiResponse.error) {
+      console.error('❌ AI Analyzer error:', aiResponse.error)
+      
+      // Log API error
+      await logApiUsage(supabase, user_id, 'ai_analyzer', 'market_analysis', 0, aiResponse.error.message, settings.trading_pairs.length, responseTime)
+      throw new Error(aiResponse.error.message)
+    }
+
+    const aiResult = aiResponse.data
+    
+    if (!aiResult.success) {
+      // Log API error
+      await logApiUsage(supabase, user_id, 'ai_analyzer', 'market_analysis', 500, aiResult.error, settings.trading_pairs.length, responseTime)
+      throw new Error(aiResult.error)
+    }
+
+    // Log successful API call
+    await logApiUsage(supabase, user_id, 'ai_analyzer', 'market_analysis', 200, null, settings.trading_pairs.length, responseTime)
+
+    // Convert AI signals to our format
+    const signals = aiResult.data.signals.map((signal: any) => ({
+      symbol: signal.symbol,
+      signal: signal.signal,
+      confidence: signal.strength, // AI already provides 0-1 scale
+      timestamp: aiResult.data.analysis_time,
+      target_price: null,
+      current_price: signal.price,
+      reason: `AI Market Analysis - ${signal.analysis}`,
+      source: 'AI_ANALYZER'
+    }))
+    
+    console.log(`🤖 AI Analyzer предоставил ${signals.length} сигналов`)
+    
+    return signals
+
+  } catch (error) {
+    const responseTime = Date.now() - startTime
+    console.error('❌ AI Analyzer failed:', error)
+    
+    // Log API error
+    await logApiUsage(supabase, user_id, 'ai_analyzer', 'market_analysis', 0, error.message, settings.trading_pairs.length, responseTime)
     throw error
   }
 }

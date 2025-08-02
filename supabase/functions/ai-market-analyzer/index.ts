@@ -294,49 +294,56 @@ serve(async (req) => {
 
     console.log(`🤖 AI Market Analysis для ${symbols.join(', ')} (${timeframe})`);
 
-    // Call Bybit API to get historical data
-    const bybitResponse = await supabase.functions.invoke('bybit-api', {
-      body: {
-        user_id,
-        action: 'get_kline_data',
-        data: {
-          symbols,
-          interval: timeframe,
-          limit: 200 // Get 200 candles for analysis
-        }
-      }
-    });
-
-    if (bybitResponse.error) {
-      throw new Error(`Bybit API error: ${bybitResponse.error.message}`);
-    }
-
-    const klineData = bybitResponse.data;
     const analysisResults = [];
 
-    // Analyze each symbol
+    // Analyze each symbol individually
     for (const symbol of symbols) {
-      const symbolKlines = klineData[symbol] || [];
+      console.log(`📊 Анализируем ${symbol}`)
       
-      if (symbolKlines.length === 0) {
-        console.log(`⚠️ Нет данных для ${symbol}`);
-        continue;
+      try {
+        // Call Bybit API to get historical data for this symbol
+        const bybitResponse = await supabase.functions.invoke('bybit-api', {
+          body: {
+            user_id,
+            action: 'get_kline_data',
+            data: {
+              symbol: symbol,
+              interval: timeframe,
+              limit: 200 // Get 200 candles for analysis
+            }
+          }
+        });
+
+        if (bybitResponse.error) {
+          console.error(`❌ Bybit API error for ${symbol}:`, bybitResponse.error);
+          continue;
+        }
+
+        const klineData = bybitResponse.data;
+        
+        if (!klineData || !klineData.result || !klineData.result.list || klineData.result.list.length === 0) {
+          console.log(`⚠️ Нет данных для ${symbol}`);
+          continue;
+        }
+
+        // Convert Bybit data to our format
+        const klines: KlineData[] = klineData.result.list.map((k: any) => ({
+          open: parseFloat(k[1]),
+          high: parseFloat(k[2]),
+          low: parseFloat(k[3]),
+          close: parseFloat(k[4]),
+          volume: parseFloat(k[5]),
+          timestamp: parseInt(k[0])
+        }));
+
+        const analysis = AIMarketAnalyzer.analyzeMarket(symbol, klines);
+        analysisResults.push(analysis);
+        
+        console.log(`📊 ${symbol}: ${analysis.signal} (${(analysis.strength * 100).toFixed(0)}%) - ${analysis.analysis}`);
+
+      } catch (error) {
+        console.error(`❌ Ошибка анализа ${symbol}:`, error);
       }
-
-      // Convert Bybit data to our format
-      const klines: KlineData[] = symbolKlines.map((k: any) => ({
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[5]),
-        timestamp: parseInt(k[0])
-      }));
-
-      const analysis = AIMarketAnalyzer.analyzeMarket(symbol, klines);
-      analysisResults.push(analysis);
-      
-      console.log(`📊 ${symbol}: ${analysis.signal} (${(analysis.strength * 100).toFixed(0)}%) - ${analysis.analysis}`);
     }
 
     // Log API usage

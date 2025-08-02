@@ -22,6 +22,7 @@ interface BotSettingsType {
   min_signal_strength: number;
   timeframe: string;
   trading_pairs: string[];
+  signal_source: string;
 }
 
 export const BotSettings = () => {
@@ -36,7 +37,8 @@ export const BotSettings = () => {
     daily_loss_limit_percent: 5.0,
     min_signal_strength: 0.7,
     timeframe: "15m",
-    trading_pairs: ["BTCUSDT", "ETHUSDT"]
+    trading_pairs: ["BTCUSDT", "ETHUSDT"],
+    signal_source: "AUTO"
   });
   const [loading, setLoading] = useState(false);
 
@@ -65,7 +67,8 @@ export const BotSettings = () => {
           daily_loss_limit_percent: data.daily_loss_limit_percent,
           min_signal_strength: data.min_signal_strength,
           timeframe: data.timeframe || "15m",
-          trading_pairs: data.trading_pairs || ["BTCUSDT", "ETHUSDT"]
+          trading_pairs: data.trading_pairs || ["BTCUSDT", "ETHUSDT"],
+          signal_source: data.signal_source || "AUTO"
         });
       }
     } catch (error) {
@@ -98,6 +101,7 @@ export const BotSettings = () => {
           min_signal_strength: settings.min_signal_strength,
           timeframe: settings.timeframe,
           trading_pairs: settings.trading_pairs,
+          signal_source: settings.signal_source,
           is_demo: true,
           updated_at: new Date().toISOString()
         });
@@ -289,6 +293,28 @@ export const BotSettings = () => {
                     <SelectItem value="4h">4 часа</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Источник сигналов</Label>
+                <Select
+                  value={settings.signal_source}
+                  onValueChange={(value) => 
+                    setSettings(prev => ({ ...prev, signal_source: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUTO">AUTO - Умный выбор</SelectItem>
+                    <SelectItem value="TOKENMETRICS">TokenMetrics API</SelectItem>
+                    <SelectItem value="AI_ANALYZER">AI Market Analyzer</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  AUTO: TokenMetrics + fallback на AI при лимитах
+                </p>
               </div>
 
               <div className="space-y-2">

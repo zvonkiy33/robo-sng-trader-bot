@@ -99,6 +99,7 @@ export type Database = {
           max_positions: number
           min_signal_strength: number
           position_size_percent: number
+          signal_source: string | null
           stop_loss_percent: number
           take_profit_percent: number
           timeframe: string | null
@@ -115,6 +116,7 @@ export type Database = {
           max_positions?: number
           min_signal_strength?: number
           position_size_percent?: number
+          signal_source?: string | null
           stop_loss_percent?: number
           take_profit_percent?: number
           timeframe?: string | null
@@ -131,6 +133,7 @@ export type Database = {
           max_positions?: number
           min_signal_strength?: number
           position_size_percent?: number
+          signal_source?: string | null
           stop_loss_percent?: number
           take_profit_percent?: number
           timeframe?: string | null

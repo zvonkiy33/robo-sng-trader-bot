@@ -70,8 +70,8 @@ const AutomatedTrading = ({ isActive, isDemo }: AutomatedTradingProps) => {
       
       console.log(`🚀 Автоматическая торговля запущена (каждые 4 часа - экономный режим)`);
       toast({
-        title: "Автоматическая торговля запущена",
-        description: "🚨 ЭКОНОМНЫЙ РЕЖИМ: проверка сигналов каждые 4 часа для сохранения лимитов API",
+        title: "🤖 Гибридная торговая система запущена",
+        description: "🎯 SMART режим: TokenMetrics + AI резерв | 📈 Интервал: 4 часа | 🛡️ Автолимиты активны",
         variant: "default",
       });
     } else {

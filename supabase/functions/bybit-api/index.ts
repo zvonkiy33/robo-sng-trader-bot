@@ -67,7 +67,9 @@ Deno.serve(async (req) => {
 
     const credentials = credentialsResult[0]
 
-    const baseUrl = is_demo ? 'https://api-testnet.bybit.com' : 'https://api.bybit.com'
+    // Use mainnet for both demo and live mode due to testnet regional restrictions
+    const baseUrl = 'https://api.bybit.com'
+    console.log(`Using Bybit API: ${baseUrl} (demo mode: ${is_demo})`)
 
     // Generate signature for Bybit V5 API (fixed)
     async function generateSignature(params: Record<string, any>, apiSecret: string, method: string = 'GET', body?: string) {

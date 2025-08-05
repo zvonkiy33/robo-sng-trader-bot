@@ -61,6 +61,52 @@ Deno.serve(async (req) => {
 
     if (credError || !credentialsResult || credentialsResult.length === 0) {
       console.error('Credentials error:', credError)
+      
+      // For demo mode, provide mock data instead of throwing error
+      if (is_demo && action === 'get_kline_data') {
+        console.log('Providing demo kline data for', data?.symbol || 'BTCUSDT')
+        const symbol = data?.symbol || 'BTCUSDT'
+        const basePrice = symbol.includes('BTC') ? 95000 : 3500
+        
+        // Generate realistic demo data
+        const demoData = []
+        const now = Date.now()
+        for (let i = 199; i >= 0; i--) {
+          const timestamp = now - (i * 15 * 60 * 1000) // 15 minutes intervals
+          const open = basePrice + (Math.random() - 0.5) * 1000
+          const close = open + (Math.random() - 0.5) * 200
+          const high = Math.max(open, close) + Math.random() * 100
+          const low = Math.min(open, close) - Math.random() * 100
+          const volume = Math.random() * 1000 + 500
+          
+          demoData.push([
+            timestamp.toString(),
+            open.toFixed(2),
+            high.toFixed(2), 
+            low.toFixed(2),
+            close.toFixed(2),
+            volume.toFixed(2)
+          ])
+        }
+        
+        await logApiUsage(supabase, user_id, 'bybit', 'get_kline_data', 200, 'Demo mode - mock data', 1, Date.now() - startTime);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          data: {
+            retCode: 0,
+            retMsg: 'OK',
+            result: {
+              symbol: symbol,
+              category: 'spot',
+              list: demoData
+            }
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+      
       await logApiUsage(supabase, user_id, 'bybit', action || 'unknown', 401, 'API credentials not found', 1, Date.now() - startTime);
       throw new Error('Bybit API credentials not found')
     }

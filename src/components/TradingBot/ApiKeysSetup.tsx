@@ -61,6 +61,14 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
           tokenMetricsKey: "", // Will load separately
         });
         setIsConnected(true);
+      } else if (isDemo) {
+        // For demo mode, set default demo keys and mark as connected
+        setKeys({
+          bybitApiKey: "demo_api_key",
+          bybitApiSecret: "demo_api_secret", 
+          tokenMetricsKey: "demo_tm_key",
+        });
+        setIsConnected(true);
       }
 
       // Load TokenMetrics key separately
@@ -83,11 +91,22 @@ export function ApiKeysSetup({ isDemo }: ApiKeysSetupProps) {
   };
 
   const handleSaveKeys = async () => {
-    if (!keys.bybitApiKey || !keys.bybitApiSecret || !keys.tokenMetricsKey) {
+    // For demo mode, don't require real API keys
+    if (!isDemo && (!keys.bybitApiKey || !keys.bybitApiSecret || !keys.tokenMetricsKey)) {
       toast({
         title: "Ошибка",
         description: "Заполните все API ключи",
         variant: "destructive",
+      });
+      return;
+    }
+    
+    // For demo mode, accept demo keys
+    if (isDemo && (keys.bybitApiKey === "demo_api_key" && keys.bybitApiSecret === "demo_api_secret")) {
+      setIsConnected(true);
+      toast({
+        title: "Демо режим активирован",
+        description: "Торговый бот готов к работе в демо-режиме с виртуальными сделками",
       });
       return;
     }

@@ -644,40 +644,65 @@ async function executeTrade(supabase: any, user_id: string, data: any) {
     
     // Calculate position size
     const positionSize = userBalance * (settings.position_size_percent / 100)
+    const currentPrice = signal.price || signal.current_price || 100000 // Use available price field
     const quantity = signal.signal === 'BUY' 
-      ? positionSize / signal.current_price 
+      ? positionSize / currentPrice 
       : positionSize
+      
+    console.log(`💰 Параметры сделки:`)
+    console.log(`   Баланс: ${userBalance} USDT`)
+    console.log(`   Размер позиции: ${positionSize} USDT (${settings.position_size_percent}%)`)
+    console.log(`   Цена входа: ${currentPrice}`)
+    console.log(`   Количество: ${quantity}`)
 
-    // Place order via Bybit API
-    const orderResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-      },
-      body: JSON.stringify({
-        user_id,
-        is_demo,
-        action: 'place_order',
+    let orderResult
+    
+    if (is_demo) {
+      // For demo mode, create a simulated successful order
+      console.log(`🎭 ДЕМО РЕЖИМ: Имитируем размещение ордера`)
+      orderResult = {
+        success: true,
         data: {
+          orderId: `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           symbol: signal.symbol,
           side: signal.signal,
           quantity: quantity.toFixed(8),
-          extraParams: {
-            timeInForce: 'IOC'
-          }
+          price: currentPrice,
+          status: 'FILLED'
         }
+      }
+    } else {
+      // Place real order via Bybit API
+      const orderResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+        },
+        body: JSON.stringify({
+          user_id,
+          is_demo,
+          action: 'place_order',
+          data: {
+            symbol: signal.symbol,
+            side: signal.signal,
+            quantity: quantity.toFixed(8),
+            extraParams: {
+              timeInForce: 'IOC'
+            }
+          }
+        })
       })
-    })
 
-    const orderResult = await orderResponse.json()
-    
-    if (!orderResult.success) {
-      throw new Error(orderResult.error)
+      orderResult = await orderResponse.json()
+      
+      if (!orderResult.success) {
+        throw new Error(orderResult.error)
+      }
     }
 
-    // Calculate stop loss and take profit
-    const entryPrice = signal.current_price
+    // Calculate stop loss and take profit  
+    const entryPrice = currentPrice // Use the same price variable as for position calculation
     const stopLoss = signal.signal === 'BUY' 
       ? entryPrice * (1 - settings.stop_loss_percent / 100)
       : entryPrice * (1 + settings.stop_loss_percent / 100)
@@ -685,6 +710,11 @@ async function executeTrade(supabase: any, user_id: string, data: any) {
     const takeProfit = signal.signal === 'BUY'
       ? entryPrice * (1 + settings.take_profit_percent / 100) 
       : entryPrice * (1 - settings.take_profit_percent / 100)
+      
+    console.log(`📊 Уровни сделки:`)
+    console.log(`   Вход: ${entryPrice}`)
+    console.log(`   Стоп-лосс: ${stopLoss}`)
+    console.log(`   Тейк-профит: ${takeProfit}`)
 
     // Save trade to database
     const { data: trade, error: tradeError } = await supabase

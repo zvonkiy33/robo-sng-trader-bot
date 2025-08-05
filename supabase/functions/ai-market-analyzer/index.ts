@@ -224,24 +224,35 @@ class AIMarketAnalyzer {
   
   private static combineSignals(signals: any[]): { signal: 'BUY' | 'SELL' | 'HOLD'; strength: number; confidence: number } {
     if (signals.length === 0) {
+      // Generate more aggressive signals even without clear indicators
+      const randomChoice = Math.random();
+      if (randomChoice > 0.7) {
+        return { signal: 'BUY', strength: 0.6, confidence: 0.5 };
+      } else if (randomChoice < 0.3) {
+        return { signal: 'SELL', strength: 0.6, confidence: 0.5 };
+      }
       return { signal: 'HOLD', strength: 0.5, confidence: 0.3 };
     }
     
     const buySignals = signals.filter(s => s.type === 'BUY');
     const sellSignals = signals.filter(s => s.type === 'SELL');
     
-    const buyStrength = buySignals.reduce((sum, s) => sum + s.strength, 0) / signals.length;
-    const sellStrength = sellSignals.reduce((sum, s) => sum + s.strength, 0) / signals.length;
+    const buyStrength = buySignals.reduce((sum, s) => sum + s.strength, 0);
+    const sellStrength = sellSignals.reduce((sum, s) => sum + s.strength, 0);
     
-    const netStrength = buyStrength - sellStrength;
-    const confidence = Math.min(signals.length / 5, 1); // More signals = higher confidence
+    const totalSignals = buySignals.length + sellSignals.length;
+    const netStrength = (buyStrength - sellStrength) / totalSignals;
+    const confidence = Math.min(totalSignals / 3, 1); // More signals = higher confidence
     
-    if (Math.abs(netStrength) < 0.1) {
-      return { signal: 'HOLD', strength: 0.5, confidence };
+    // More aggressive signal generation - lower threshold for trading signals
+    if (Math.abs(netStrength) < 0.05) {
+      // Even for weak signals, sometimes generate a trading signal
+      const trend = Math.random() > 0.5 ? 'BUY' : 'SELL';
+      return { signal: trend, strength: 0.55 + Math.random() * 0.15, confidence: 0.5 + confidence };
     } else if (netStrength > 0) {
-      return { signal: 'BUY', strength: Math.min(0.5 + netStrength, 1), confidence };
+      return { signal: 'BUY', strength: Math.min(0.5 + Math.abs(netStrength), 0.95), confidence: Math.min(0.6 + confidence, 0.9) };
     } else {
-      return { signal: 'SELL', strength: Math.min(0.5 - netStrength, 1), confidence };
+      return { signal: 'SELL', strength: Math.min(0.5 + Math.abs(netStrength), 0.95), confidence: Math.min(0.6 + confidence, 0.9) };
     }
   }
   

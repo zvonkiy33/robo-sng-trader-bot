@@ -51,67 +51,26 @@ Deno.serve(async (req) => {
 
     console.log(`Bybit API request: ${action} for user ${user_id}`)
 
-    // Get user's API credentials using secure function
-    const { data: credentialsResult, error: credError } = await supabase
-      .rpc('get_decrypted_credentials', {
-        p_user_id: user_id,
-        p_exchange: 'bybit',
-        p_is_demo: is_demo || true
-      })
+    // Prepare credentials only when required (skip for public market data)
+    let credentials: any = null;
 
-    if (credError || !credentialsResult || credentialsResult.length === 0) {
-      console.error('Credentials error:', credError)
-      
-      // For demo mode, provide mock data instead of throwing error
-      if (is_demo && action === 'get_kline_data') {
-        console.log('Providing demo kline data for', data?.symbol || 'BTCUSDT')
-        const symbol = data?.symbol || 'BTCUSDT'
-        const basePrice = symbol.includes('BTC') ? 95000 : 3500
+    if (action !== 'get_kline_data') {
+      const { data: credentialsResult, error: credError } = await supabase
+        .rpc('get_decrypted_credentials', {
+          p_user_id: user_id,
+          p_exchange: 'bybit',
+          p_is_demo: (typeof is_demo === 'boolean') ? is_demo : true
+        });
+
+      if (credError || !credentialsResult || credentialsResult.length === 0) {
+        console.error('Credentials error:', credError);
         
-        // Generate realistic demo data
-        const demoData = []
-        const now = Date.now()
-        for (let i = 199; i >= 0; i--) {
-          const timestamp = now - (i * 15 * 60 * 1000) // 15 minutes intervals
-          const open = basePrice + (Math.random() - 0.5) * 1000
-          const close = open + (Math.random() - 0.5) * 200
-          const high = Math.max(open, close) + Math.random() * 100
-          const low = Math.min(open, close) - Math.random() * 100
-          const volume = Math.random() * 1000 + 500
-          
-          demoData.push([
-            timestamp.toString(),
-            open.toFixed(2),
-            high.toFixed(2), 
-            low.toFixed(2),
-            close.toFixed(2),
-            volume.toFixed(2)
-          ])
-        }
-        
-        await logApiUsage(supabase, user_id, 'bybit', 'get_kline_data', 200, 'Demo mode - mock data', 1, Date.now() - startTime);
-        
-        return new Response(JSON.stringify({
-          success: true,
-          data: {
-            retCode: 0,
-            retMsg: 'OK',
-            result: {
-              symbol: symbol,
-              category: 'spot',
-              list: demoData
-            }
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        await logApiUsage(supabase, user_id, 'bybit', action || 'unknown', 401, 'API credentials not found', 1, Date.now() - startTime);
+        throw new Error('Bybit API credentials not found');
       }
-      
-      await logApiUsage(supabase, user_id, 'bybit', action || 'unknown', 401, 'API credentials not found', 1, Date.now() - startTime);
-      throw new Error('Bybit API credentials not found')
-    }
 
-    const credentials = credentialsResult[0]
+      credentials = credentialsResult[0];
+    }
 
     // Use mainnet for both demo and live mode due to testnet regional restrictions
     const baseUrl = 'https://api.bybit.com'
@@ -315,21 +274,15 @@ Deno.serve(async (req) => {
     })
 
   } catch (error) {
-    console.error('Bybit API error:', error)
-    
-    // Log API usage for errors
-    const { user_id, action } = await req.json().catch(() => ({ user_id: null, action: 'unknown' }));
-    if (user_id) {
-      await logApiUsage(supabase, user_id, 'bybit', action || 'unknown', 500, error.message, 1, Date.now() - startTime);
-    }
-    
+    console.error('Bybit API error:', error);
+
     return new Response(JSON.stringify({ 
       success: false, 
-      error: error.message 
+      error: (error as Error).message || 'Unknown error' 
     }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    });
   }
 })
 

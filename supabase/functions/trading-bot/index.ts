@@ -520,7 +520,7 @@ async function fetchAIAnalyzerSignals(supabase: any, user_id: string, settings: 
     const signals = aiResult.data.signals.map((signal: any) => ({
       symbol: signal.symbol,
       signal: signal.signal,
-      confidence: signal.strength, // AI already provides 0-1 scale
+      confidence: Math.max(signal.confidence ?? 0, signal.strength ?? 0),
       timestamp: aiResult.data.analysis_time,
       target_price: null,
       current_price: signal.price,

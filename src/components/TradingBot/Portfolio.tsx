@@ -105,28 +105,8 @@ export function Portfolio() {
 
       if (allError) throw allError;
 
-      // Get real balance from Bybit API
-      let realBalance = 5000; // Fallback
-      try {
-        const balanceResponse = await supabase.functions.invoke('bybit-api', {
-          body: {
-            user_id: user.id,
-            is_demo: true,
-            action: 'get_balance'
-          }
-        });
-        
-        if (balanceResponse.data?.success && balanceResponse.data?.data?.result?.list?.[0]) {
-          const usdtBalance = balanceResponse.data.data.result.list[0].coin
-            .find((c: any) => c.coin === 'USDT');
-          if (usdtBalance && usdtBalance.availableToWithdraw) {
-            realBalance = parseFloat(usdtBalance.availableToWithdraw);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching real balance:', error);
-        // Используем fallback баланс если API недоступен
-      }
+      // Demo initial balance (virtual funds)
+      const initialDemoBalance = 5000;
 
       // Calculate portfolio metrics
       const dailyPnL = todayTrades?.reduce((sum, trade) => sum + (trade.pnl || 0), 0) || 0;
@@ -209,9 +189,11 @@ export function Portfolio() {
       const unrealizedPnL = openPositions.reduce((sum, pos) => sum + pos.pnl, 0);
       const usedBalance = openPositions.reduce((sum, pos) => sum + (pos.entryPrice * pos.size), 0);
 
+      const equity = initialDemoBalance + totalPnL + unrealizedPnL;
+
       setPortfolioData({
-        totalBalance: realBalance,
-        availableBalance: realBalance - usedBalance,
+        totalBalance: equity,
+        availableBalance: equity - usedBalance,
         unrealizedPnL,
         dailyPnL,
         totalPnL,

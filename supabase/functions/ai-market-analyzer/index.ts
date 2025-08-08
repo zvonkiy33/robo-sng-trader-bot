@@ -325,20 +325,20 @@ serve(async (req) => {
           }
         });
 
-        if (bybitResponse.error) {
-          console.error(`❌ Bybit API error for ${symbol}:`, bybitResponse.error);
+        const payload = bybitResponse.data;
+        if (!payload || payload.success === false) {
+          console.error(`❌ Bybit API payload invalid for ${symbol}:`, payload?.error || 'no data');
           continue;
         }
 
-        const klineData = bybitResponse.data;
-        
-        if (!klineData || !klineData.result || !klineData.result.list || klineData.result.list.length === 0) {
+        const bybit = payload.data;
+        if (!bybit || !bybit.result || !bybit.result.list || bybit.result.list.length === 0) {
           console.log(`⚠️ Нет данных для ${symbol}`);
           continue;
         }
 
         // Convert Bybit data to our format
-        const klines: KlineData[] = klineData.result.list.map((k: any) => ({
+        const klines: KlineData[] = bybit.result.list.map((k: any) => ({
           open: parseFloat(k[1]),
           high: parseFloat(k[2]),
           low: parseFloat(k[3]),

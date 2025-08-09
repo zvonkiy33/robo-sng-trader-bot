@@ -134,6 +134,74 @@ class TechnicalAnalysis {
   }
 }
 
+// ---- Public market data fallbacks (no API keys) ----
+const tfToSeconds = (tf: string) => ({
+  '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '4h': 14400,
+}[tf as keyof any] || 900);
+
+const tfToKrakenMinutes = (tf: string) => ({
+  '1m': 1, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240,
+}[tf as keyof any] || 15);
+
+const tfToBitfinex = (tf: string) => ({
+  '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '4h': '4h',
+}[tf as keyof any] || '15m');
+
+function mapToUsdPairs(symbol: string) {
+  const base = symbol.replace(/USDT$/i, 'USD').toUpperCase();
+  const coin = base.replace('USDT', 'USD');
+  // Special case for Kraken BTC ticker (XBT)
+  const kraken = coin.startsWith('BTC') ? coin.replace('BTC', 'XBT') : coin;
+  return {
+    coinbase: coin.replace('USD', '-') , // will be BTC-USD, ETH-USD
+    kraken,
+    bitfinex: `t${coin}` // tBTCUSD, tETHUSD
+  };
+}
+
+async function fetchCoinbaseKlines(symbol: string, timeframe: string): Promise<KlineData[]> {
+  const { coinbase } = mapToUsdPairs(symbol);
+  const url = `https://api.exchange.coinbase.com/products/${coinbase}USD/candles?granularity=${tfToSeconds(timeframe)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
+  const data = await res.json(); // [ time, low, high, open, close, volume ] latest->oldest
+  if (!Array.isArray(data)) return [];
+  const mapped = data.map((k: any[]) => ({
+    open: Number(k[3]), high: Number(k[2]), low: Number(k[1]), close: Number(k[4]), volume: Number(k[5]), timestamp: Number(k[0]) * 1000,
+  }));
+  return mapped.reverse();
+}
+
+async function fetchKrakenKlines(symbol: string, timeframe: string): Promise<KlineData[]> {
+  const { kraken } = mapToUsdPairs(symbol);
+  const url = `https://api.kraken.com/0/public/OHLC?pair=${kraken}&interval=${tfToKrakenMinutes(timeframe)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+  const json = await res.json();
+  const resultKey = Object.keys(json.result || {}).find((k) => k !== 'last');
+  const arr = resultKey ? json.result[resultKey] : [];
+  if (!Array.isArray(arr)) return [];
+  return arr.map((k: any[]) => ({
+    timestamp: Number(k[0]) * 1000,
+    open: Number(k[1]), high: Number(k[2]), low: Number(k[3]), close: Number(k[4]), volume: Number(k[6]) || Number(k[5]) || 0,
+  }));
+}
+
+async function fetchBitfinexKlines(symbol: string, timeframe: string): Promise<KlineData[]> {
+  const { bitfinex } = mapToUsdPairs(symbol);
+  const tf = tfToBitfinex(timeframe);
+  const url = `https://api-pub.bitfinex.com/v2/candles/trade:${tf}:${bitfinex}/hist?limit=200`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Bitfinex HTTP ${res.status}`);
+  const data = await res.json(); // [MTS, OPEN, CLOSE, HIGH, LOW, VOLUME] latest->oldest
+  if (!Array.isArray(data)) return [];
+  const mapped = data.map((k: any[]) => ({
+    timestamp: Number(k[0]), open: Number(k[1]), close: Number(k[2]), high: Number(k[3]), low: Number(k[4]), volume: Number(k[5])
+  }));
+  // Normalize OHLC order to our struct
+  return mapped.reverse().map(k => ({ open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume, timestamp: k.timestamp }));
+}
+
 // AI Market Analysis Engine
 class AIMarketAnalyzer {
   
@@ -345,8 +413,36 @@ serve(async (req) => {
           console.error(`Bybit fetch failed for ${symbol}:`, e);
         }
 
-        // Fallback to Binance public API if Bybit failed or returned empty
+        // Fallbacks: Coinbase → Kraken → Bitfinex → Binance
         if (klines.length === 0) {
+          // Coinbase
+          try {
+            klines = await fetchCoinbaseKlines(symbol, timeframe);
+          } catch (e) {
+            console.error(`❌ Coinbase fallback failed for ${symbol}:`, e);
+          }
+        }
+
+        if (klines.length === 0) {
+          // Kraken
+          try {
+            klines = await fetchKrakenKlines(symbol, timeframe);
+          } catch (e) {
+            console.error(`❌ Kraken fallback failed for ${symbol}:`, e);
+          }
+        }
+
+        if (klines.length === 0) {
+          // Bitfinex
+          try {
+            klines = await fetchBitfinexKlines(symbol, timeframe);
+          } catch (e) {
+            console.error(`❌ Bitfinex fallback failed for ${symbol}:`, e);
+          }
+        }
+
+        if (klines.length === 0) {
+          // Binance (may be blocked in some regions)
           try {
             const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=200`;
             const res = await fetch(binanceUrl, { headers: { 'User-Agent': 'AI-Market-Analyzer/1.0' } });

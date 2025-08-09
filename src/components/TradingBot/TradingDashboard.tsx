@@ -6,15 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Activity, Settings, TrendingUp, Wallet } from "lucide-react";
-import { ApiKeysSetup } from "./ApiKeysSetup";
+// Removed heavy tabs to reduce API usage
+// import { ApiKeysSetup } from "./ApiKeysSetup";
 import { BotSettings } from "./BotSettings";
 import PositionMonitor from "./PositionMonitor";
 import AutomatedTrading from "./AutomatedTrading";
 import { Portfolio } from "./Portfolio";
 import { TradingHistory } from "./TradingHistory";
-import { PriceChart } from "./PriceChart";
-import { BotLogs } from "./BotLogs";
-import { ApiMonitor } from "./ApiMonitor";
+// import { PriceChart } from "./PriceChart";
+// import { BotLogs } from "./BotLogs";
+// import { ApiMonitor } from "./ApiMonitor";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -248,18 +249,10 @@ export function TradingDashboard() {
 
         {/* Main Content */}
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="dashboard" className="flex items-center space-x-2">
               <TrendingUp className="w-4 h-4" />
               <span>Дашборд</span>
-            </TabsTrigger>
-            <TabsTrigger value="logs" className="flex items-center space-x-2">
-              <Activity className="w-4 h-4" />
-              <span>Логи</span>
-            </TabsTrigger>
-            <TabsTrigger value="chart" className="flex items-center space-x-2">
-              <TrendingUp className="w-4 h-4" />
-              <span>График</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center space-x-2">
               <Settings className="w-4 h-4" />
@@ -273,29 +266,14 @@ export function TradingDashboard() {
               <Activity className="w-4 h-4" />
               <span>История</span>
             </TabsTrigger>
-            <TabsTrigger value="api" className="flex items-center space-x-2">
-              <Activity className="w-4 h-4" />
-              <span>API</span>
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard">
             <div className="text-center py-8 text-muted-foreground">
               <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="text-lg font-medium mb-2">Настройте API ключи для начала работы</p>
-              <p className="text-sm">Добавьте ключи Bybit и TokenMetrics в разделе ниже, затем перейдите в настройки для конфигурации робота</p>
+              <p className="text-lg font-medium mb-2">Добро пожаловать!</p>
+              <p className="text-sm">Перейдите в «Настройки», чтобы сконфигурировать параметры робота и включить автоторговлю.</p>
             </div>
-
-            {/* API Keys Setup */}
-            <ApiKeysSetup isDemo={isDemo} />
-          </TabsContent>
-
-          <TabsContent value="logs">
-            <BotLogs />
-          </TabsContent>
-
-          <TabsContent value="chart">
-            <PriceChart />
           </TabsContent>
 
           <TabsContent value="settings">
@@ -308,10 +286,6 @@ export function TradingDashboard() {
 
           <TabsContent value="history">
             <TradingHistory />
-          </TabsContent>
-
-          <TabsContent value="api">
-            <ApiMonitor />
           </TabsContent>
         </Tabs>
       </div>

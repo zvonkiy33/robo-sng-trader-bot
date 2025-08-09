@@ -312,40 +312,65 @@ serve(async (req) => {
       console.log(`📊 Анализируем ${symbol}`)
       
       try {
-        // Call Bybit API to get historical data for this symbol
-        const bybitResponse = await supabase.functions.invoke('bybit-api', {
-          body: {
-            user_id,
-            action: 'get_kline_data',
-            data: {
-              symbol: symbol,
-              interval: timeframe,
-              limit: 200 // Get 200 candles for analysis
+        // Try Bybit first (may be blocked in some regions)
+        let klines: KlineData[] = [];
+        try {
+          const bybitResponse = await supabase.functions.invoke('bybit-api', {
+            body: {
+              user_id,
+              action: 'get_kline_data',
+              data: {
+                symbol: symbol,
+                interval: timeframe,
+                limit: 200 // Get 200 candles for analysis
+              }
             }
-          }
-        });
+          });
 
         const payload = bybitResponse.data;
-        if (!payload || payload.success === false) {
-          console.error(`❌ Bybit API payload invalid for ${symbol}:`, payload?.error || 'no data');
-          continue;
+        if (payload && payload.success !== false) {
+          const bybit = payload.data;
+          if (bybit && bybit.result && bybit.result.list && bybit.result.list.length > 0) {
+            klines = bybit.result.list.map((k: any) => ({
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+              volume: parseFloat(k[5]),
+              timestamp: parseInt(k[0])
+            }));
+          }
+        }
+        } catch (e) {
+          console.error(`Bybit fetch failed for ${symbol}:`, e);
         }
 
-        const bybit = payload.data;
-        if (!bybit || !bybit.result || !bybit.result.list || bybit.result.list.length === 0) {
+        // Fallback to Binance public API if Bybit failed or returned empty
+        if (klines.length === 0) {
+          try {
+            const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=200`;
+            const res = await fetch(binanceUrl, { headers: { 'User-Agent': 'AI-Market-Analyzer/1.0' } });
+            if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              klines = data.map((k: any[]) => ({
+                open: parseFloat(k[1]),
+                high: parseFloat(k[2]),
+                low: parseFloat(k[3]),
+                close: parseFloat(k[4]),
+                volume: parseFloat(k[5]),
+                timestamp: parseInt(k[0])
+              }));
+            }
+          } catch (e) {
+            console.error(`❌ Binance fallback failed for ${symbol}:`, e);
+          }
+        }
+
+        if (klines.length === 0) {
           console.log(`⚠️ Нет данных для ${symbol}`);
           continue;
         }
-
-        // Convert Bybit data to our format
-        const klines: KlineData[] = bybit.result.list.map((k: any) => ({
-          open: parseFloat(k[1]),
-          high: parseFloat(k[2]),
-          low: parseFloat(k[3]),
-          close: parseFloat(k[4]),
-          volume: parseFloat(k[5]),
-          timestamp: parseInt(k[0])
-        }));
 
         const analysis = AIMarketAnalyzer.analyzeMarket(symbol, klines);
         analysisResults.push(analysis);

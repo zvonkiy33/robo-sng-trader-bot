@@ -24,6 +24,7 @@ export function TradingDashboard() {
   const [isDemo, setIsDemo] = useState(true);
   const [isBotActive, setIsBotActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [testCooldown, setTestCooldown] = useState(0); // секунд до повторного теста
   const { toast } = useToast();
 
   // Load bot status on mount
@@ -31,7 +32,14 @@ export function TradingDashboard() {
     if (user) {
       loadBotStatus();
     }
-  }, [user]);
+}, [user]);
+
+  // Таймер обратного отсчёта для защиты от частых вызовов функции
+  useEffect(() => {
+    if (testCooldown <= 0) return;
+    const id = setInterval(() => setTestCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [testCooldown]);
 
   const loadBotStatus = async () => {
     try {
@@ -153,7 +161,7 @@ export function TradingDashboard() {
   };
 
   const handleTestSignals = async () => {
-    if (!user) return;
+    if (!user || testCooldown > 0) return;
     
     setLoading(true);
     try {
@@ -191,6 +199,7 @@ export function TradingDashboard() {
         variant: "destructive",
       });
     } finally {
+      setTestCooldown(60); // защита от частых вызовов
       setLoading(false);
     }
   };
@@ -233,11 +242,11 @@ export function TradingDashboard() {
               </Button>
               <Button
                 onClick={handleTestSignals}
-                disabled={loading}
+                disabled={loading || testCooldown > 0}
                 variant="outline"
                 size="sm"
               >
-                Тест сигналов
+                {testCooldown > 0 ? `Повтор через ${testCooldown}s` : 'Тест сигналов'}
               </Button>
               <Badge variant={isBotActive ? "default" : "secondary"}>
                 <Activity className="w-3 h-3 mr-1" />

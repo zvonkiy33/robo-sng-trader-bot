@@ -139,8 +139,8 @@ const PositionMonitor = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Запускаем мониторинг каждые 30 секунд
-    const interval = setInterval(checkPositions, 30000);
+    // Запускаем мониторинг каждые 2 минуты (экономия лимитов)
+    const interval = setInterval(checkPositions, 120000);
 
     // Запускаем сразу
     checkPositions();

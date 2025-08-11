@@ -367,11 +367,15 @@ async function getAndProcessSignals(supabase: any, user_id: string, data: any) {
     }
   }
 
+  // После обработки сигналов дополнительно проверяем позиции на срабатывание SL/TP (работает на сервере)
+  const closeSummary = await checkAndClosePositions(supabase, user_id, settings.is_demo);
+
   return new Response(JSON.stringify({ 
     success: true, 
     data: {
       signals: processedSignals,
-      settings: settings
+      settings,
+      position_monitor: closeSummary
     }
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -623,6 +627,123 @@ async function logApiUsage(supabase: any, user_id: string, api_name: string, end
       })
   } catch (error) {
     console.error('Failed to log API usage:', error.message)
+  }
+}
+
+// Server-side price fetch with gentle pacing to respect public API limits
+async function fetchPrices(symbols: string[]): Promise<Record<string, number>> {
+  const results: Record<string, number> = {}
+  for (const symbol of symbols) {
+    try {
+      const resp = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const json = await resp.json()
+      const price = parseFloat(json?.price)
+      if (!Number.isNaN(price)) results[symbol] = price
+    } catch (e: any) {
+      console.warn(`Price fetch failed for ${symbol}:`, e?.message || e)
+    }
+    // tiny delay to be polite
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  return results
+}
+
+// Close positions by SL/TP on the server (works even if client is closed)
+async function checkAndClosePositions(supabase: any, user_id: string, is_demo: boolean) {
+  try {
+    const { data: openTrades, error } = await supabase
+      .from('trades')
+      .select('*')
+      .eq('user_id', user_id)
+      .in('status', ['OPEN', 'FILLED'])
+      .not('price', 'is', null)
+
+    if (error) throw error
+
+    if (!openTrades || openTrades.length === 0) {
+      return { checked: 0, closed: 0, reason: 'no_open_trades' }
+    }
+
+    const symbols = Array.from(new Set(openTrades.map((t: any) => t.symbol)))
+    const prices = await fetchPrices(symbols)
+
+    let closed = 0
+    let checked = 0
+
+    for (const trade of openTrades) {
+      const price = prices[trade.symbol]
+      if (!price) continue
+      checked++
+
+      const side = trade.side
+      const sl = trade.stop_loss
+      const tp = trade.take_profit
+
+      let shouldClose = false
+      if (side === 'BUY') {
+        if ((sl && price <= sl) || (tp && price >= tp)) shouldClose = true
+      } else if (side === 'SELL') {
+        if ((sl && price >= sl) || (tp && price <= tp)) shouldClose = true
+      }
+
+      if (shouldClose) {
+        // Try to close on exchange in real mode (best effort)
+        if (!is_demo) {
+          try {
+            const opposite = side === 'BUY' ? 'SELL' : 'BUY'
+            await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/bybit-api`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+              },
+              body: JSON.stringify({
+                user_id,
+                is_demo,
+                action: 'place_order',
+                data: {
+                  symbol: trade.symbol,
+                  side: opposite,
+                  quantity: (typeof trade.quantity === 'number' ? trade.quantity.toFixed(8) : trade.quantity)
+                }
+              })
+            }).catch(() => {})
+          } catch (_e) {
+            console.warn('Real order close attempt failed (ignored)')
+          }
+        }
+
+        const entry = trade.filled_price ?? trade.price
+        const qty = Number(trade.quantity) || 0
+        let pnl = 0
+        if (side === 'BUY') {
+          pnl = (price - entry) * qty
+        } else {
+          pnl = (entry - price) * qty
+        }
+
+        const { error: updErr } = await supabase
+          .from('trades')
+          .update({
+            status: 'CLOSED',
+            closed_at: new Date().toISOString(),
+            pnl
+          })
+          .eq('id', trade.id)
+
+        if (!updErr) {
+          closed++
+        } else {
+          console.error('Failed to close trade', trade.id, updErr.message)
+        }
+      }
+    }
+
+    return { checked, closed, symbols: Object.keys(prices) }
+  } catch (e: any) {
+    console.error('checkAndClosePositions error:', e?.message || e)
+    return { checked: 0, closed: 0, error: e?.message || String(e) }
   }
 }
 

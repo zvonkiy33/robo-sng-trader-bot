@@ -104,7 +104,7 @@ export const BotSettings = () => {
           signal_source: settings.signal_source,
           is_demo: true,
           updated_at: new Date().toISOString()
-        });
+        }, { onConflict: 'user_id' });
 
       if (error) throw error;
 

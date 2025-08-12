@@ -1,3 +1,4 @@
+<!-- sync-check: lovable->github fe41c512-1709-4e61-9d07-8f1e02db14d2 -->
 # Welcome to your Lovable project
 
 ## Project info
